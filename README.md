@@ -12,16 +12,6 @@ python3.11 -m venv .venv
 .venv/bin/python -m pytest
 ```
 
-Материалы организаторов распакуйте локально в `materials/` (папка в `.gitignore`):
-
-```text
-materials/hackathon-participants/
-├── PROTOCOL.md
-├── example-case/
-├── inputs/settlement.json
-└── meridian/
-```
-
 ## Запуск
 
 ```sh
