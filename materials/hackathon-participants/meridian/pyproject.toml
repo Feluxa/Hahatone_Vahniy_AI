@@ -1,0 +1,15 @@
+[project]
+name = "meridian-clearing"
+version = "0.1.0"
+description = "Synthetic banking operations repository for case-building harnesses"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["backend/src"]
+testpaths = ["tests"]
+addopts = "-ra -p no:cacheprovider"
+markers = ["postgres: requires isolated PostgreSQL with migrations"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

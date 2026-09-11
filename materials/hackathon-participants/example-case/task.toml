@@ -1,0 +1,39 @@
+schema_version = "1.1"
+
+[task]
+name = "example/half-open-interval"
+description = "Исправление проверки принадлежности полуоткрытому интервалу"
+authors = [{ name = "Участник Примеров", email = "participant@example.org" }]
+
+[metadata]
+task_type = "agentic"
+bank_domain = "Общие программные утилиты"
+language = "ru"
+build_tool = "docker"
+difficulty = "easy"
+source = "example/interval"
+team = "team-example"
+fail_to_pass = [
+    "tests/test_interval.py::test_right_boundary",
+    "tests/test_interval.py::test_empty_interval",
+]
+pass_to_pass = [
+    "tests/test_interval.py::test_existing_membership_and_api",
+    "tests/test_interval.py::test_invalid_bounds",
+]
+anti_cheat = [
+    "tests/test_interval.py::test_legacy_unchanged",
+]
+
+[agent]
+timeout_sec = 600
+
+[verifier]
+timeout_sec = 60
+
+[environment]
+allow_internet = false
+build_timeout_sec = 600
+cpus = 1
+memory_mb = 1024
+storage_mb = 2048

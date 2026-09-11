@@ -1,0 +1,24 @@
+{
+  "protocol_version": "1.0",
+  "repository": "../meridian",
+  "brief": "Устраните расхождение preview и SQL-материализации суточного закрытия торговой точки. День — [00:00 текущей даты, 00:00 следующей даты) в Europe/Moscow. Покупки увеличивают итог, возвраты уменьшают; суммы событий положительные. Учитываются только settled. Tenant, merchant и currency изолированы. Повторное закрытие заменяет результат той же даты, не меняет соседние. Публичные модели, сигнатуры, схемы и архивный экспорт сохраняются. SQL должен реально исполняться в PostgreSQL16. Подготовьте кейс, а не исправляйте исходный репозиторий.",
+  "output_dir": "../runs/team-example",
+  "case_id": "hackathon/settlement-001",
+  "difficulty": "medium",
+  "language": "ru",
+  "limits": {
+    "agent_timeout_sec": 1800,
+    "verifier_timeout_sec": 300,
+    "build_timeout_sec": 900,
+    "cpus": 2,
+    "memory_mb": 4096,
+    "storage_mb": 10240
+  },
+  "author": {
+    "name": "Участник Примеров",
+    "email": "participant@example.org"
+  },
+  "seed": 4107,
+  "source": "hackathon/settlement-001",
+  "team": "team-example"
+}
