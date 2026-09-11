@@ -51,6 +51,6 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 |---|---|---|
 | contracts, serde | готово | покрыто `tests/test_contracts.py` |
 | repo, protocol, manifest, task_folder (№1) | заглушки | |
-| environment, verify, summary, golden (№3) | заглушки | |
+| environment, verify, summary, golden (№3) | готово | покрыто `tests/build`, `tests/verify`, `tests/evidence`, `golden/settlement-001` (30 тестов pass) |
 | llm, usage (№2) | заглушки | |
 | pipeline, cli, static_checks (№4) | заглушки | |

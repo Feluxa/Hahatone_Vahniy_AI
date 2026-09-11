@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+norecursedirs = [".git", ".venv", "dist", "*.egg*"]
 addopts = "-ra -p no:cacheprovider"
 markers = [
     "docker: требует запущенный Docker",
@@ -17,3 +18,7 @@ markers = [
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+exclude = [
+    "materials",
+    ".venv",
+]

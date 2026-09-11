@@ -11,7 +11,9 @@
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
+from string import Template
 
 from harness.contracts import RunProfile, TestLists
 
@@ -19,17 +21,71 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def render_dockerfile(profile: RunProfile) -> str:
-    raise NotImplementedError
+    tmpl_path = TEMPLATES_DIR / "Dockerfile.tmpl"
+    tmpl_str = tmpl_path.read_text(encoding="utf-8")
+
+    install_req = ""
+    if profile.requirements_file:
+        install_req = (
+            f"COPY {profile.requirements_file} /tmp/{profile.requirements_file}\n"
+            f"RUN python -m pip install --no-cache-dir -r /tmp/{profile.requirements_file}"
+        )
+
+    mapping = {
+        "python_version": profile.python_version or "3.11",
+        "postgres_major": str(profile.postgres_major or 16),
+        "install_requirements": install_req,
+    }
+    return Template(tmpl_str).substitute(mapping)
 
 
 def render_conftest(profile: RunProfile) -> str:
-    raise NotImplementedError
+    tmpl_path = TEMPLATES_DIR / "conftest.py.tmpl"
+    tmpl_str = tmpl_path.read_text(encoding="utf-8")
+    mapping = {
+        "pytest_pythonpath": repr(profile.pytest_pythonpath),
+        "needs_postgres": "True" if profile.needs_postgres else "False",
+        "postgres_major": str(profile.postgres_major or 16),
+        "migration_cmd": repr(profile.migration_command),
+        "seed_sql_files": repr(profile.seed_sql_files),
+        "env_vars": repr(profile.env_vars),
+    }
+    return Template(tmpl_str).substitute(mapping)
 
 
 def render_test_sh(lists: TestLists) -> str:
-    raise NotImplementedError
+    tmpl_path = TEMPLATES_DIR / "test.sh.tmpl"
+    tmpl_str = tmpl_path.read_text(encoding="utf-8")
+    mapping = {
+        "expected_tests": str(len(lists.all_ids())),
+    }
+    return Template(tmpl_str).substitute(mapping)
 
 
 def write_environment(env_dir: Path, profile: RunProfile, repo_copy: Path) -> None:
     """Создаёт environment/Dockerfile (+ requirements) и кладёт repo_copy в environment/repo/."""
-    raise NotImplementedError
+    env_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Запись Dockerfile
+    dockerfile_content = render_dockerfile(profile)
+    (env_dir / "Dockerfile").write_text(dockerfile_content, encoding="utf-8")
+
+    # 2. Копирование requirements файла при наличии
+    if profile.requirements_file:
+        src_req = repo_copy / profile.requirements_file
+        if src_req.exists():
+            dest_req = env_dir / profile.requirements_file
+            dest_req.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_req, dest_req)
+
+    # 3. Копирование репозитория в environment/repo/ без мусора
+    target_repo = env_dir / "repo"
+    if target_repo.exists():
+        shutil.rmtree(target_repo)
+
+    def _ignore(path: str, names: list[str]) -> set[str]:
+        ignored = {".git", ".venv", "__pycache__", ".pytest_cache", ".DS_Store"}
+        return {n for n in names if n in ignored or n.endswith(".pyc")}
+
+    shutil.copytree(repo_copy, target_repo, ignore=_ignore)
+

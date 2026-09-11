@@ -1,0 +1,49 @@
+schema_version = "1.1"
+
+[task]
+name = "hackathon/settlement-001"
+description = "Устранение расхождений preview и SQL-материализации суточного закрытия торговой точки"
+authors = [{ name = "Участник Примеров", email = "participant@example.org" }]
+
+[metadata]
+task_type = "agentic"
+bank_domain = "Расчётное закрытие торговых точек"
+language = "ru"
+build_tool = "docker"
+difficulty = "medium"
+source = "hackathon/settlement-001"
+team = "team-example"
+fail_to_pass = [
+    "tests/test_settlement_close.py::test_sql_refund_reduces_net",
+    "tests/test_settlement_close.py::test_preview_refund_reduces_net",
+    "tests/test_settlement_close.py::test_sql_next_midnight_excluded",
+    "tests/test_settlement_close.py::test_preview_matches_sql",
+]
+pass_to_pass = [
+    "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution",
+    "tests/test_settlement_close.py::test_sql_purchase_close",
+    "tests/test_settlement_close.py::test_start_midnight_included",
+    "tests/test_settlement_close.py::test_non_settled_ignored",
+    "tests/test_settlement_close.py::test_timezone_normalization",
+]
+anti_cheat = [
+    "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency",
+    "tests/test_settlement_close.py::test_reclose_replaces_same_date_only",
+    "tests/test_settlement_close.py::test_public_signatures_and_models",
+    "tests/test_settlement_close.py::test_schema_unchanged",
+    "tests/test_settlement_close.py::test_archive_export_kept",
+    "tests/test_settlement_close.py::test_untrusted_files_untouched",
+]
+
+[agent]
+timeout_sec = 1800
+
+[verifier]
+timeout_sec = 300
+
+[environment]
+allow_internet = false
+build_timeout_sec = 900
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
