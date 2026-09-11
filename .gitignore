@@ -23,3 +23,13 @@ out/
 
 # РљРѕРїРёСЏ meridian РІРЅСѓС‚СЂРё СЌС‚Р°Р»РѕРЅРЅРѕРіРѕ РєРµР№СЃР° СЃРѕР±РёСЂР°РµС‚СЃСЏ Р»РѕРєР°Р»СЊРЅРѕ
 golden/*/environment/repo/
+
+# Claude / Claude Code — локально, не в репозитории
+.claude/
+.claude.json
+.claude.json.backup
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md
+**/CLAUDE.local.md
+.mcp.json
