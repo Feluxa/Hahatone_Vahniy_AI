@@ -1,0 +1,18 @@
+{
+  "calls": [
+    {
+      "model": "model-name",
+      "duration_sec": 12.4,
+      "input_tokens": 18231,
+      "output_tokens": 2410,
+      "purpose": "tests"
+    },
+    {
+      "model": "model-name",
+      "duration_sec": 3.1,
+      "input_tokens": null,
+      "output_tokens": null,
+      "purpose": "spec"
+    }
+  ]
+}

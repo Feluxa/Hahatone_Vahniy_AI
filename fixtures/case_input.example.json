@@ -1,0 +1,25 @@
+{
+  "protocol_version": "1.0",
+  "repository": "/abs/path/materials/hackathon-participants/meridian",
+  "brief": "Устраните расхождение preview и SQL-материализации суточного закрытия торговой точки. …",
+  "output_dir": "/abs/path/materials/hackathon-participants/runs/team-example",
+  "case_id": "hackathon/settlement-001",
+  "difficulty": "medium",
+  "language": "ru",
+  "source": "hackathon/settlement-001",
+  "team": "team-example",
+  "author": {
+    "name": "Участник Примеров",
+    "email": "participant@example.org"
+  },
+  "limits": {
+    "agent_timeout_sec": 1800,
+    "verifier_timeout_sec": 300,
+    "build_timeout_sec": 900,
+    "cpus": 2,
+    "memory_mb": 4096,
+    "storage_mb": 10240
+  },
+  "seed": 4107,
+  "input_path": "/abs/path/materials/hackathon-participants/inputs/settlement.json"
+}

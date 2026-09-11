@@ -1,0 +1,35 @@
+{
+  "spec": {
+    "goal": "Согласовать preview и SQL-закрытие дня",
+    "behavior": [
+      "Возвраты уменьшают итог"
+    ],
+    "invariants": [
+      "Сигнатуры публичных моделей не меняются"
+    ],
+    "edge_cases": [
+      "Событие ровно в 00:00 следующего дня"
+    ],
+    "defect_hypothesis": "Python складывает возвраты; SQL включает правую границу",
+    "bank_domain": "Расчётное закрытие торговых точек",
+    "description": "Согласование preview и SQL-материализации суточного закрытия"
+  },
+  "instruction_md": "# Суточное закрытие торговой точки\n\n(текст задания)\n",
+  "test_files": {
+    "test_settlement.py": "(содержимое pytest-файла)"
+  },
+  "lists": {
+    "fail_to_pass": [
+      "tests/test_settlement.py::test_sql_refund_reduces_net"
+    ],
+    "pass_to_pass": [
+      "tests/test_settlement.py::test_existing_preview_purchases"
+    ],
+    "anti_cheat": [
+      "tests/test_settlement.py::test_archive_export_kept"
+    ]
+  },
+  "solution_files": {
+    "solve.sh": "#!/bin/sh\nset -eu\n(правки /app/repo)\n"
+  }
+}

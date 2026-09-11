@@ -1,0 +1,19 @@
+[project]
+name = "llm-testcase-harness"
+version = "0.1.0"
+description = "Генератор проверенных тест-кейсов для AI-разработчика по PROTOCOL.md"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -p no:cacheprovider"
+markers = [
+    "docker: требует запущенный Docker",
+    "llm: делает реальные запросы к LLM (тратит бюджет)",
+    "slow: дольше 30 секунд",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

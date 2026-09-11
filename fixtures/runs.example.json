@@ -1,0 +1,89 @@
+{
+  "runs": [
+    {
+      "name": "base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:…",
+      "duration_sec": 41.2,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "base/full/verifier/tests.xml",
+      "log_dir": "base/full",
+      "tests": {
+        "tests/test_settlement.py::test_sql_refund_reduces_net": {
+          "outcome": "failed",
+          "message": "assert Decimal('130') == Decimal('70')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement.py::test_existing_preview_purchases": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /solution/solve.sh",
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:…",
+      "duration_sec": 43.9,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/full/verifier/tests.xml",
+      "log_dir": "oracle/full",
+      "tests": {
+        "tests/test_settlement.py::test_sql_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement.py::test_existing_preview_purchases": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-1",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": false,
+      "commands": [],
+      "image_digest": null,
+      "duration_sec": null,
+      "exit_code": null,
+      "reward": null,
+      "report_path": null,
+      "log_dir": null,
+      "tests": {},
+      "repeat_of": null,
+      "note": "not executed: patch did not apply"
+    }
+  ]
+}

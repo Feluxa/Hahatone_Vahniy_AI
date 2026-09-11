@@ -1,0 +1,85 @@
+{
+  "snapshot_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "brief": "(бриф из входа)",
+  "files": [
+    {
+      "path": "backend/src/components/settlement/application/impl/services/NettingPolicy.py",
+      "content": "(содержимое файла)",
+      "reason": "brief keyword: settlement",
+      "trust": "trusted"
+    },
+    {
+      "path": "sql/061_refresh_daily_settlement.sql",
+      "content": "(содержимое файла)",
+      "reason": "defines bank_settlement.refresh_daily_settlement",
+      "trust": "trusted"
+    },
+    {
+      "path": "DOCS/project/settlement.md",
+      "content": "(содержимое файла)",
+      "reason": "component documentation",
+      "trust": "trusted"
+    }
+  ],
+  "python_symbols": [
+    {
+      "path": "backend/src/components/settlement/application/impl/services/NettingPolicy.py",
+      "kind": "method",
+      "qualname": "NettingPolicy.build",
+      "signature": "(self, tenant_id: str, merchant_id: str, business_date: date, currency: str, events: list[MerchantEventModel]) -> SettlementModel",
+      "line": 9,
+      "docstring": null
+    }
+  ],
+  "sql_objects": [
+    {
+      "path": "sql/061_refresh_daily_settlement.sql",
+      "kind": "function",
+      "qualname": "bank_settlement.refresh_daily_settlement",
+      "signature": "(p_tenant_id text, p_merchant_id text, p_business_date date, p_currency char(3)) RETURNS bank_settlement.daily_settlement",
+      "line": 1
+    },
+    {
+      "path": "sql/060_settlement_schema.sql",
+      "kind": "table",
+      "qualname": "bank_settlement.daily_settlement",
+      "signature": "tenant_id text, merchant_id text, business_date date, currency char(3), purchase_amount numeric(20,4), refund_amount numeric(20,4), net_amount numeric(20,4), event_count bigint",
+      "line": 16
+    }
+  ],
+  "existing_tests": [
+    "tests/settlement/test_preview.py",
+    "tests/sql_settlement/test_purchase_close.sql"
+  ],
+  "run_profile": {
+    "python_version": "3.11",
+    "requirements_file": "requirements.lock",
+    "pytest_pythonpath": [
+      "backend/src"
+    ],
+    "pytest_testpaths": [
+      "tests"
+    ],
+    "needs_postgres": true,
+    "postgres_major": 16,
+    "migration_command": [
+      "python",
+      "-m",
+      "alembic",
+      "upgrade",
+      "head"
+    ],
+    "seed_sql_files": [
+      "sql/090_core_seed.sql"
+    ],
+    "env_vars": {
+      "DATABASE_URL": "SQLAlchemy URL (postgresql+psycopg://…)",
+      "MERIDIAN_DSN": "libpq DSN"
+    }
+  },
+  "untrusted_paths": [
+    "DOCS/imported/settlement_vendor_feedback.jsonl",
+    "DOCS/imported/vendor_ticket_184.txt"
+  ],
+  "total_files_in_repo": 187
+}

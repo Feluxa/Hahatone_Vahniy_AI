@@ -1,0 +1,18 @@
+{
+  "ok": false,
+  "problems": [
+    {
+      "category": "mutant_survived",
+      "target": "tests",
+      "details": "Мутант 'сутки по UTC' прошёл все тесты",
+      "test_ids": [],
+      "run_names": [
+        "mutant/llm-utc-day"
+      ]
+    }
+  ],
+  "runs": [
+    "base/full",
+    "oracle/full"
+  ]
+}

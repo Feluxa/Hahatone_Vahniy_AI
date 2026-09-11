@@ -1,0 +1,7 @@
+# Скрипты, которые исполняются в Linux-контейнере, всегда с LF (важно для тех, кто на Windows)
+* text=auto
+*.sh text eol=lf
+*.tmpl text eol=lf
+Dockerfile* text eol=lf
+*.py text eol=lf
+*.sql text eol=lf
