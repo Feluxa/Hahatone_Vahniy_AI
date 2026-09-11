@@ -56,7 +56,7 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | repo.trust (№1) | готово | `find_untrusted`, `find_untrusted_with_reasons`, `find_injection_targets`; признаки общие, код недоверенным не становится; `tests/repo/test_trust.py` |
 | repo.profile (№1) | готово | `detect_run_profile(repo) -> RunProfile`; деградирует до дефолтов, `ProfileError` только на структурных проблемах; `tests/repo/test_profile.py` |
 | repo (остальное), manifest, task_folder (№1) | заглушки | |
-| environment, verify, summary, golden (№3) | заглушки | |
+| environment, verify, summary, golden (№3) | готово | покрыто tests/verify/ и tests/build/ |
 | llm, usage (№2) | заглушки | |
 | pipeline, cli, static_checks (№4) | заглушки | |
 
