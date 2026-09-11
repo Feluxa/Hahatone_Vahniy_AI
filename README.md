@@ -52,7 +52,8 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | contracts, serde | готово | покрыто `tests/test_contracts.py` |
 | repo.snapshot (№1) | готово | `compute_snapshot_sha256`, `list_regular_files`; `tests/repo/test_snapshot.py`; эталонный хэш meridian — ниже |
 | repo.workspace (№1) | готово | `copy_clean(src, dst) -> список пропущенного`; `tests/repo/test_workspace.py` |
-| repo (остальное), protocol, manifest, task_folder (№1) | заглушки | |
+| protocol.input, protocol.output (№1) | готово | `load_input` собирает все проблемы входа сразу; `write_result` пишет `result.json` атомарно; `tests/protocol/` |
+| repo (остальное), manifest, task_folder (№1) | заглушки | |
 | environment, verify, summary, golden (№3) | заглушки | |
 | llm, usage (№2) | заглушки | |
 | pipeline, cli, static_checks (№4) | заглушки | |
