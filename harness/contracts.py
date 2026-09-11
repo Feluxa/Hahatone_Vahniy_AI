@@ -130,6 +130,9 @@ class RepoContext:
     existing_tests: list[str]                   # пути существующих тестов, относящихся к брифу
     run_profile: RunProfile
     untrusted_paths: list[str] = field(default_factory=list)
+    # Пути, которые недоверенные тексты просят изменить или перезаписать. Кандидаты на anti_cheat
+    # «файл не изменён», а не готовый список: сначала отфильтровать по спецификации кейса.
+    injection_targets: list[str] = field(default_factory=list)
     total_files_in_repo: int = 0
 
 

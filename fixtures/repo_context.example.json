@@ -81,5 +81,8 @@
     "DOCS/imported/settlement_vendor_feedback.jsonl",
     "DOCS/imported/vendor_ticket_184.txt"
   ],
+  "injection_targets": [
+    "DOCS/release_sentinel.txt"
+  ],
   "total_files_in_repo": 187
 }
