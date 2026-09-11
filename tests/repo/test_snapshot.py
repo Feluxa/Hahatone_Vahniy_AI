@@ -1,8 +1,6 @@
 """Хэш снимка исходного репозитория (PROTOCOL.md, раздел 2).
 
-Фикстурный репозиторий строится в tmp_path побайтно, а не лежит в tests/repo/data/:
-в .gitattributes включён `text=auto`, поэтому git нормализовал бы переводы строк при checkout
-и эталонные хэши разъезжались бы между Windows и Linux. Здесь байты заданы явно.
+Фикстурный репозиторий строится в tmp_path побайтно — почему именно так, см. tests/repo/tiny_repo.py.
 """
 
 from __future__ import annotations
@@ -13,47 +11,9 @@ from pathlib import Path
 import pytest
 
 from harness.repo.snapshot import SnapshotError, compute_snapshot_sha256, list_regular_files
-
-# Мини-репозиторий: скрытый файл, вложенные папки, пустой файл, не-ASCII путь и содержимое,
-# CRLF и нулевой байт (файлы обязаны читаться в бинарном режиме),
-# а также имена a-b.txt / a.txt / a/b.txt, которые ловят сортировку «по папкам» вместо
-# лексикографической по полному пути: '-' (45) < '.' (46) < '/' (47).
-TINY_REPO: dict[str, bytes] = {
-    ".gitignore": b"__pycache__/\n",
-    "README.md": b"# tiny\r\n",
-    "a-b.txt": b"dash",
-    "a.txt": b"A",
-    "a/b.txt": b"B",
-    "empty.txt": b"",
-    "src/app.py": b"def main() -> None:\n    pass\n",
-    "src/nested/deep/util.py": b"VALUE = 1\n",
-    "docs/отчёт.md": "Итог\n".encode("utf-8"),
-    "bin/blob.dat": b"\x00\x01\x02\xff\r\n",
-}
-
-TINY_REPO_PATHS = [
-    ".gitignore",
-    "README.md",
-    "a-b.txt",
-    "a.txt",
-    "a/b.txt",
-    "bin/blob.dat",
-    "docs/отчёт.md",
-    "empty.txt",
-    "src/app.py",
-    "src/nested/deep/util.py",
-]
+from tests.repo.tiny_repo import TINY_REPO, TINY_REPO_PATHS, build_repo, make_symlink
 
 EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-
-
-def build_repo(root: Path, files: dict[str, bytes]) -> Path:
-    """Раскладывает files по диску под root. Ключи — относительные POSIX-пути."""
-    for rel, content in files.items():
-        target = root / Path(rel)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-    return root
 
 
 def reference_snapshot(root: Path) -> str:
@@ -211,13 +171,6 @@ def test_large_file_is_read_in_chunks(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Символьные ссылки: в исходном наборе их нет, встретились — ошибка входа
 # ---------------------------------------------------------------------------
-
-def make_symlink(link: Path, target: Path, *, target_is_directory: bool = False) -> None:
-    try:
-        link.symlink_to(target, target_is_directory=target_is_directory)
-    except (OSError, NotImplementedError) as exc:  # Windows без прав на симлинки
-        pytest.skip(f"символьные ссылки недоступны: {exc}")
-
 
 def test_file_symlink_raises(tiny_repo: Path) -> None:
     make_symlink(tiny_repo / "link.txt", tiny_repo / "a.txt")
