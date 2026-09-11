@@ -50,7 +50,24 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | Модуль | Статус | Заметки |
 |---|---|---|
 | contracts, serde | готово | покрыто `tests/test_contracts.py` |
-| repo, protocol, manifest, task_folder (№1) | заглушки | |
+| repo.snapshot (№1) | готово | `compute_snapshot_sha256`, `list_regular_files`; `tests/repo/test_snapshot.py`; эталонный хэш meridian — ниже |
+| repo (остальное), protocol, manifest, task_folder (№1) | заглушки | |
 | environment, verify, summary, golden (№3) | заглушки | |
 | llm, usage (№2) | заглушки | |
 | pipeline, cli, static_checks (№4) | заглушки | |
+
+### Эталонный хэш снимка
+
+Исходный репозиторий `materials/hackathon-participants/meridian`: 187 обычных файлов, включая скрытый `.gitignore`.
+
+```text
+f63dfc6392b934d50c961f11250cc576d1160c27f4beb13628b5a720ffccea50
+```
+
+Это значение попадает в `result.json` как `input_snapshot_sha256` и сверяется в конце прогона. Проверить вручную:
+
+```sh
+python -c "from pathlib import Path; from harness.repo.snapshot import compute_snapshot_sha256; print(compute_snapshot_sha256(Path('materials/hackathon-participants/meridian')))"
+```
+
+Если хэш отличается — содержимое `materials/` изменено, а менять его нельзя: от побайтного совпадения зависят anti_cheat-проверки.
