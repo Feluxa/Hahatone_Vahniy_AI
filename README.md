@@ -53,6 +53,8 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | repo.snapshot (№1) | готово | `compute_snapshot_sha256`, `list_regular_files`; `tests/repo/test_snapshot.py`; эталонный хэш meridian — ниже |
 | repo.workspace (№1) | готово | `copy_clean(src, dst) -> список пропущенного`; `tests/repo/test_workspace.py` |
 | protocol.input, protocol.output (№1) | готово | `load_input` собирает все проблемы входа сразу; `write_result` пишет `result.json` атомарно; `tests/protocol/` |
+| repo.trust (№1) | готово | `find_untrusted`, `find_untrusted_with_reasons`, `find_injection_targets`; признаки общие, код недоверенным не становится; `tests/repo/test_trust.py` |
+| repo.profile (№1) | готово | `detect_run_profile(repo) -> RunProfile`; деградирует до дефолтов, `ProfileError` только на структурных проблемах; `tests/repo/test_profile.py` |
 | repo (остальное), manifest, task_folder (№1) | заглушки | |
 | environment, verify, summary, golden (№3) | заглушки | |
 | llm, usage (№2) | заглушки | |
