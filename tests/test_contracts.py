@@ -18,6 +18,7 @@ SINGLE = {
     "repo_context.example.json": RepoContext,
     "case_draft.example.json": CaseDraft,
     "verdict.example.json": Verdict,
+    "verdict.golden.json": Verdict,
     "llm_usage.example.json": UsageLog,
     "result.example.json": CaseResult,
 }
@@ -30,8 +31,9 @@ def test_fixture_roundtrip(name: str) -> None:
     assert to_dict(obj) == data
 
 
-def test_runs_fixture_roundtrip() -> None:
-    data = json.loads((FIXTURES / "runs.example.json").read_text(encoding="utf-8"))
+@pytest.mark.parametrize("filename", ["runs.example.json", "runs.golden.json"])
+def test_runs_fixture_roundtrip(filename: str) -> None:
+    data = json.loads((FIXTURES / filename).read_text(encoding="utf-8"))
     runs = [from_dict(RunResult, item) for item in data["runs"]]
     assert [to_dict(run) for run in runs] == data["runs"]
 

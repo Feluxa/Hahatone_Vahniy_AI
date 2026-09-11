@@ -1,0 +1,90 @@
+import os
+import shutil
+import subprocess
+import tempfile
+import tomllib
+from pathlib import Path
+
+from harness.verify.mutation import hunk_revert_mutants, oracle_diff
+
+GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden" / "settlement-001"
+
+
+def test_golden_task_toml_validity() -> None:
+    task_toml = GOLDEN_DIR / "task.toml"
+    assert task_toml.exists()
+    data = tomllib.loads(task_toml.read_text(encoding="utf-8"))
+
+    assert data["schema_version"] == "1.1"
+    assert data["task"]["name"] == "hackathon/settlement-001"
+    meta = data["metadata"]
+    assert len(meta["fail_to_pass"]) == 4
+    assert len(meta["pass_to_pass"]) == 5
+    assert len(meta["anti_cheat"]) == 6
+
+    # Проверка отсутствия дубликатов между списками
+    all_tests = meta["fail_to_pass"] + meta["pass_to_pass"] + meta["anti_cheat"]
+    assert len(all_tests) == len(set(all_tests))
+
+
+def test_golden_instruction_no_leaks() -> None:
+    instr = (GOLDEN_DIR / "instruction.md").read_text(encoding="utf-8")
+
+    # Не должно быть имен тестовых функций
+    assert "test_" not in instr
+    # Не должно быть путей tests/ или solution/
+    assert "tests/" not in instr
+    assert "solution/" not in instr
+    assert "solve.sh" not in instr
+
+    # Обязаны быть названы все проверяемые инварианты
+    assert "Europe/Moscow" in instr
+    assert "LegacySettlementExporter" in instr
+    assert "DOCS" in instr
+    assert "bank_settlement" in instr
+
+
+def test_golden_solution_diff_and_mutants() -> None:
+    base_repo = GOLDEN_DIR / "environment" / "repo"
+    solve_sh = GOLDEN_DIR / "solution" / "solve.sh"
+    assert base_repo.exists()
+    assert solve_sh.exists()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        oracle_repo = Path(tmp) / "repo"
+        shutil.copytree(base_repo, oracle_repo)
+
+        sh_bin = shutil.which("sh")
+        if sh_bin:
+            res = subprocess.run(
+                [sh_bin, str(solve_sh.resolve())],
+                cwd=oracle_repo,
+                env={**os.environ, "REPO_PATH": str(oracle_repo)},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        else:
+            # На Windows без bash/sh извлекаем и выполняем вложенный Python-код
+            import sys
+            script_text = solve_sh.read_text(encoding="utf-8")
+            py_code = script_text.split("<<'PY'\n")[1].rsplit("\nPY", 1)[0]
+            res = subprocess.run(
+                [sys.executable, "-c", py_code],
+                cwd=oracle_repo,
+                env={**os.environ, "REPO_PATH": str(oracle_repo)},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+        assert res.returncode == 0
+        diff = oracle_diff(base_repo, oracle_repo)
+        assert "NettingPolicy.py" in diff
+        assert "061_refresh_daily_settlement.sql" in diff
+
+        mutants = hunk_revert_mutants(diff)
+        assert len(mutants) == 2
+        mutant_names = {m.name for m in mutants}
+        assert "hunk-1" in mutant_names
+        assert "hunk-2" in mutant_names

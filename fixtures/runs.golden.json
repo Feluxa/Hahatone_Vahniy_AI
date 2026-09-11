@@ -1,0 +1,572 @@
+{
+  "runs": [
+    {
+      "name": "base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:golden-base-digest",
+      "duration_sec": 32.4,
+      "exit_code": 1,
+      "reward": 0,
+      "report_path": "base/full/verifier/tests.xml",
+      "log_dir": "base/full",
+      "tests": {
+        "tests/test_settlement_close.py::test_sql_refund_reduces_net": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_sql_refund_reduces_net",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_refund_reduces_net": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_refund_reduces_net",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_sql_next_midnight_excluded": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_sql_next_midnight_excluded",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_matches_sql": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_matches_sql",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_purchase_close": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_start_midnight_included": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_non_settled_ignored": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_timezone_normalization": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_reclose_replaces_same_date_only": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_public_signatures_and_models": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_untrusted_files_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /solution/solve.sh",
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:golden-oracle-digest",
+      "duration_sec": 35.1,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/full/verifier/tests.xml",
+      "log_dir": "oracle/full",
+      "tests": {
+        "tests/test_settlement_close.py::test_sql_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_next_midnight_excluded": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_matches_sql": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_purchase_close": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_start_midnight_included": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_non_settled_ignored": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_timezone_normalization": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_reclose_replaces_same_date_only": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_public_signatures_and_models": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_untrusted_files_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "repeat/base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:golden-base-digest",
+      "duration_sec": 31.8,
+      "exit_code": 1,
+      "reward": 0,
+      "report_path": "repeat/base/full/verifier/tests.xml",
+      "log_dir": "repeat/base/full",
+      "tests": {
+        "tests/test_settlement_close.py::test_sql_refund_reduces_net": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_sql_refund_reduces_net",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_refund_reduces_net": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_refund_reduces_net",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_sql_next_midnight_excluded": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_sql_next_midnight_excluded",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_matches_sql": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_matches_sql",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_purchase_close": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_start_midnight_included": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_non_settled_ignored": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_timezone_normalization": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_reclose_replaces_same_date_only": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_public_signatures_and_models": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_untrusted_files_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": "base/full",
+      "note": null
+    },
+    {
+      "name": "repeat/oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /solution/solve.sh",
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:golden-oracle-digest",
+      "duration_sec": 34.6,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "repeat/oracle/full/verifier/tests.xml",
+      "log_dir": "repeat/oracle/full",
+      "tests": {
+        "tests/test_settlement_close.py::test_sql_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_next_midnight_excluded": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_matches_sql": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_purchase_close": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_start_midnight_included": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_non_settled_ignored": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_timezone_normalization": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_reclose_replaces_same_date_only": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_public_signatures_and_models": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_untrusted_files_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": "oracle/full",
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-1",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "patch -R -p1 < /mutant.patch",
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:golden-mut1-digest",
+      "duration_sec": 33.2,
+      "exit_code": 1,
+      "reward": 0,
+      "report_path": "mutant/hunk-1/verifier/tests.xml",
+      "log_dir": "mutant/hunk-1",
+      "tests": {
+        "tests/test_settlement_close.py::test_sql_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_refund_reduces_net": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_refund_reduces_net",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_sql_next_midnight_excluded": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_matches_sql": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_matches_sql",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_purchase_close": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_start_midnight_included": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_non_settled_ignored": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_timezone_normalization": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_reclose_replaces_same_date_only": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_public_signatures_and_models": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_untrusted_files_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-2",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "patch -R -p1 < /mutant.patch",
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:golden-mut2-digest",
+      "duration_sec": 33.5,
+      "exit_code": 1,
+      "reward": 0,
+      "report_path": "mutant/hunk-2/verifier/tests.xml",
+      "log_dir": "mutant/hunk-2",
+      "tests": {
+        "tests/test_settlement_close.py::test_sql_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_preview_refund_reduces_net": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_next_midnight_excluded": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_sql_next_midnight_excluded",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_matches_sql": {
+          "outcome": "failed",
+          "message": "assert failed for tests/test_settlement_close.py::test_preview_matches_sql",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_settlement_close.py::test_preview_purchases_and_real_di_resolution": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_sql_purchase_close": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_start_midnight_included": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_non_settled_ignored": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_timezone_normalization": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_isolation_tenant_merchant_currency": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_reclose_replaces_same_date_only": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_public_signatures_and_models": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_archive_export_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_settlement_close.py::test_untrusted_files_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    }
+  ]
+}

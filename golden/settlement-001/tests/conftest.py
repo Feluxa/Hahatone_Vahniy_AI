@@ -10,17 +10,17 @@ from pathlib import Path
 import pytest
 
 # Настройка путей pythonpath
-PYTHONPATHS = $pytest_pythonpath
+PYTHONPATHS = ['backend/src']
 for p in PYTHONPATHS:
     full_path = p if os.path.isabs(p) else os.path.join("/app/repo", p)
     if full_path not in sys.path:
         sys.path.insert(0, full_path)
 
-NEEDS_POSTGRES = $needs_postgres
-POSTGRES_MAJOR = $postgres_major
-MIGRATION_CMD = $migration_cmd
-SEED_SQL_FILES = $seed_sql_files
-ENV_VARS = $env_vars
+NEEDS_POSTGRES = True
+POSTGRES_MAJOR = 16
+MIGRATION_CMD = ['python', '-m', 'alembic', 'upgrade', 'head']
+SEED_SQL_FILES = ['sql/090_core_seed.sql']
+ENV_VARS = {}
 
 for _k, _v in ENV_VARS.items():
     os.environ.setdefault(_k, _v)

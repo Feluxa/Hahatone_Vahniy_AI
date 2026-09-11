@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "problems": [],
+  "runs": [
+    "base/full",
+    "oracle/full",
+    "repeat/base/full",
+    "repeat/oracle/full",
+    "mutant/hunk-1",
+    "mutant/hunk-2"
+  ]
+}
