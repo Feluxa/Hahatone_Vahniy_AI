@@ -240,6 +240,31 @@ def _align_and_validate_tests(
     return test_files, TestLists(fail_to_pass=f2p, pass_to_pass=p2p, anti_cheat=ac)
 
 
+def syntax_problems(test_files: dict[str, str]) -> list[str]:
+    """Синтаксические ошибки в файлах тестов черновика. Пустой список — всё разбирается.
+
+    Файл, который не парсится, до Docker доходить не должен: pytest не соберёт из него
+    ни одного теста, сборка упадёт, и три итерации ремонта уйдут вслепую. Типовой случай —
+    модель убирает async у тестовой функции, но оставляет в теле async with или await.
+
+    Проверка идёт через compile, а не ast.parse: «async with вне корутины» — ошибка этапа
+    компиляции, и ast.parse такой файл разбирает молча.
+    """
+    problems: list[str] = []
+    for name, code in sorted(test_files.items()):
+        if not name.endswith(".py"):
+            continue
+        try:
+            compile(code, name, "exec")
+        except SyntaxError as error:
+            where = f"{name}:{error.lineno or '?'}"
+            problems.append(f"{where}: {error.msg}")
+        except ValueError as error:
+            # Нулевые байты и прочее, что compile не берёт в принципе.
+            problems.append(f"{name}: {error}")
+    return problems
+
+
 def lists_inconsistent_with_files(test_files: dict[str, str], lists: TestLists) -> list[str]:
     """Проблемы согласованности списков и файлов черновика. Пустой список — всё в порядке.
 

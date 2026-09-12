@@ -31,6 +31,7 @@ from harness.llm.test_writer import (
     _align_and_validate_tests,
     _protected_files,
     lists_inconsistent_with_files,
+    syntax_problems,
     write_tests,
 )
 
@@ -190,7 +191,7 @@ def _repair_tests(
     # Списки уже приведены к возвращённому файлу, но после отбрасывания «висячих» ID
     # fail_to_pass мог опустеть. Такой черновик собрать нельзя: это провал итерации ремонта,
     # а не повод ронять прогон — возвращаем прежний рабочий набор.
-    problems = lists_inconsistent_with_files(new_files, new_lists)
+    problems = syntax_problems(new_files) + lists_inconsistent_with_files(new_files, new_lists)
     if problems:
         logger.warning(
             "Ремонт тестов дал несогласованный черновик (%s), оставляем прежние тесты",
@@ -284,6 +285,10 @@ def create_case_draft(
 
     # Черновик со списками, которые ссылаются на несуществующий файл, до диска доходить не должен:
     # там он превратится в TaskFolderError уже после половины работы.
+    problems = syntax_problems(test_files)
+    if problems:
+        raise ParsingError("Файлы тестов не компилируются: " + "; ".join(problems))
+
     problems = lists_inconsistent_with_files(test_files, lists)
     if problems:
         raise ParsingError(

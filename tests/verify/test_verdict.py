@@ -521,3 +521,23 @@ def test_reclassify_also_moves_from_anti_cheat() -> None:
     assert new_lists.anti_cheat == []
     assert new_lists.fail_to_pass == [_F2P, _AC]
     assert len(notes) == 1
+
+
+def test_failed_collect_problem_carries_the_error_text() -> None:
+    """Без текста ошибки ремонт три итерации чинит вслепую."""
+    lists = _make_sample_lists()
+    note = (
+        "pytest --collect-only завершился с кодом 2:\n"
+        'E   File "/tests/test_case.py", line 2\n'
+        "E   SyntaxError: 'async with' outside async function"
+    )
+    runs = _full_runs() + [
+        _run("collect", RunKind.BASE, RunScope.COLLECT, {}, None, executed=False, note=note),
+    ]
+
+    verdict = decide(runs, lists, [])
+
+    problem = next(p for p in verdict.problems if p.category == ProblemCategory.LIST_MISMATCH)
+    assert "SyntaxError: 'async with' outside async function" in problem.details
+    assert "test_case.py" in problem.details
+    assert problem.target == RepairTarget.TESTS

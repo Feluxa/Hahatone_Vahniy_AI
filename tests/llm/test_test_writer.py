@@ -21,6 +21,7 @@ from harness.llm.test_writer import (
     _align_and_validate_tests,
     _protected_files,
     lists_inconsistent_with_files,
+    syntax_problems,
     _extract_test_functions_from_ast,
     _normalize_test_id,
     write_tests,
@@ -337,13 +338,15 @@ def _tests_prompt() -> str:
     )
 
 
-def test_prompt_forbids_async_test_functions() -> None:
+def test_prompt_gives_async_template_not_just_a_ban() -> None:
+    """Запрет без образца модель обходит: убирает async у функции, а async with оставляет."""
     prompt = _tests_prompt()
 
     assert "async def test_" in prompt
-    assert "ЗАПРЕЩЁН" in prompt
-    assert "asyncio.run" in prompt
-    assert "существующие тесты компонента из контекста" in prompt
+    assert "async def scenario()" in prompt
+    assert "asyncio.run(scenario())" in prompt
+    assert "`await`, `async with` и `async for` допустимы ТОЛЬКО внутри вложенной" in prompt
+    assert "SyntaxError" in prompt
 
 
 def test_prompt_forbids_generated_hashes_and_untrusted_sources() -> None:
@@ -434,3 +437,55 @@ def test_unassigned_functions_never_guessed_into_fail_to_pass() -> None:
         "tests/test_case.py::test_sentinel_untouched",
         "tests/test_case.py::test_close_window_isolation",
     ]
+
+
+_ASYNC_WITH_OUTSIDE = (
+    "def test_close() -> None:\n"
+    "    async with container() as scope:\n"
+    "        assert True\n"
+)
+
+
+def test_syntax_problems_catches_async_with_outside_coroutine() -> None:
+    """Реальный случай из прогона: модель убрала async у функции, но оставила async with."""
+    problems = syntax_problems({"test_case.py": _ASYNC_WITH_OUTSIDE})
+
+    assert len(problems) == 1
+    assert problems[0].startswith("test_case.py:2:")
+    assert "'async with' outside async function" in problems[0]
+
+
+def test_syntax_problems_accepts_the_prompt_template() -> None:
+    code = (
+        "import asyncio\n\n\n"
+        "def test_close() -> None:\n"
+        "    async def scenario() -> None:\n"
+        "        async with container() as scope:\n"
+        "            assert await scope.get(X)\n\n"
+        "    asyncio.run(scenario())\n"
+    )
+
+    assert syntax_problems({"test_case.py": code}) == []
+
+
+def test_syntax_problems_reports_plain_syntax_error() -> None:
+    problems = syntax_problems({"test_case.py": "def test_broken(:\n    assert True\n"})
+
+    assert len(problems) == 1
+    assert problems[0].startswith("test_case.py:1:")
+
+
+def test_syntax_problems_ignores_non_python_files() -> None:
+    assert syntax_problems({"data.expected": "это вообще не питон ("}) == []
+
+
+def test_syntax_problems_checks_every_file() -> None:
+    files = {
+        "test_a.py": "def test_ok():\n    assert True\n",
+        "test_b.py": _ASYNC_WITH_OUTSIDE,
+    }
+
+    problems = syntax_problems(files)
+
+    assert len(problems) == 1
+    assert problems[0].startswith("test_b.py:")

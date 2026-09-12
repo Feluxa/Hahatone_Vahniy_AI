@@ -421,3 +421,58 @@ def test_repair_prompt_explains_when_to_move_and_when_to_fix() -> None:
 
     assert "ПЕРЕНЕСИ его в `fail_to_pass`" in prompt
     assert "ПОЧИНИ тест" in prompt
+
+
+_BROKEN_ASYNC = (
+    "def test_close() -> None:\n"
+    "    async with container() as scope:\n"
+    "        assert True\n"
+)
+
+
+def test_create_case_draft_rejects_uncompilable_tests(sample_context: RepoContext) -> None:
+    """Файл с SyntaxError не доходит до write_task_folder и до Docker."""
+    client = MagicMock(spec=LlmClient)
+
+    def _fake_write_tests(_client, _context, _spec):
+        return (
+            {"test_case.py": _BROKEN_ASYNC},
+            TestLists(fail_to_pass=["tests/test_case.py::test_close"], pass_to_pass=[], anti_cheat=[]),
+            [],
+        )
+
+    with patch("harness.llm.repair.write_spec") as spec_mock, \
+         patch("harness.llm.repair.write_instruction", return_value="# Задание"), \
+         patch("harness.llm.repair.write_tests", side_effect=_fake_write_tests), \
+         patch("harness.llm.repair.write_solution") as solution_mock:
+        spec_mock.return_value = CaseSpec(
+            goal="g", behavior=[], invariants=[], edge_cases=[],
+            defect_hypothesis="d", bank_domain="Расчеты", description="desc",
+        )
+        with pytest.raises(ParsingError) as excinfo:
+            create_case_draft(client, sample_context)
+
+    message = str(excinfo.value)
+    assert "не компилируются" in message
+    assert "test_case.py:2" in message
+    assert "'async with' outside async function" in message
+    # До сборки решения и папки кейса дело не дошло.
+    solution_mock.assert_not_called()
+
+
+def test_repair_with_uncompilable_tests_is_a_failed_iteration(
+    sample_context: RepoContext, sample_draft: CaseDraft,
+) -> None:
+    """Ремонт вернул нерабочий файл — итерация неудачная, прежние тесты сохранены."""
+    client = _client_returning({
+        "test_file_name": "test_case.py",
+        "test_file_content": _BROKEN_ASYNC,
+        "fail_to_pass": ["tests/test_case.py::test_close"],
+        "pass_to_pass": [],
+        "anti_cheat": [],
+    })
+
+    repaired = repair(client, sample_context, sample_draft, _tests_verdict(), {})
+
+    assert repaired.test_files == sample_draft.test_files
+    assert repaired.lists == sample_draft.lists

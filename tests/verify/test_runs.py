@@ -181,7 +181,7 @@ class _CollectRunner(_Runner):
         stdout_path.write_text(self.stdout, encoding="utf-8")
         stderr_path.write_text("", encoding="utf-8")
         return ContainerOutcome(
-            exit_code=0, timed_out=False, duration_sec=0.2,
+            exit_code=self.exit_code, timed_out=False, duration_sec=0.2,
             stdout_path=stdout_path, stderr_path=stderr_path, command=list(command),
         )
 
@@ -335,3 +335,45 @@ def test_applier_replaces_unique_anchor(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert (repo / "policy.py").read_text(encoding="utf-8") == "net = a + b\nother = 1\n"
+
+
+def test_collect_note_carries_stdout_tail(tmp_path: Path) -> None:
+    """Ремонт должен видеть саму ошибку сборки, а не только «тесты не сверены»."""
+    stdout = "\n".join(f"строка {i}" for i in range(1, 61)) + (
+        "\nE   File \"/tests/test_case.py\", line 2\n"
+        "E       async with container() as scope:\n"
+        "E   SyntaxError: 'async with' outside async function\n"
+    )
+    runner = _CollectRunner(stdout)
+    runner.exit_code = 2
+
+    run = run_collect(
+        task_dir=_task_dir(tmp_path),
+        evidence_dir=tmp_path / "evidence",
+        image="case-verifier:test",
+        limits=LIMITS,
+        runner=runner,
+    )
+
+    assert run.executed is False
+    note = run.note or ""
+    assert "завершился с кодом 2" in note
+    assert "SyntaxError: 'async with' outside async function" in note
+    # Хвост, а не весь лог: начало вывода в note не попадает.
+    assert "строка 1\n" not in note
+    assert len(note.splitlines()) <= 32
+
+
+def test_collect_note_is_empty_on_success(tmp_path: Path) -> None:
+    runner = _CollectRunner("tests/test_case.py::test_bug\n\n1 test collected in 0.04s\n")
+
+    run = run_collect(
+        task_dir=_task_dir(tmp_path),
+        evidence_dir=tmp_path / "evidence",
+        image="case-verifier:test",
+        limits=LIMITS,
+        runner=runner,
+    )
+
+    assert run.executed is True
+    assert run.note is None

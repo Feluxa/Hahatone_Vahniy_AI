@@ -228,8 +228,8 @@ def decide(
                 category=ProblemCategory.LIST_MISMATCH,
                 target=RepairTarget.TESTS,
                 details=(
-                    f"Collection did not run (exit_code={collect_run.exit_code}, "
-                    f"note={collect_run.note}): собранные тесты не сверены со списками манифеста"
+                    "Сборка тестов не прошла, собранные тесты не сверены со списками манифеста. "
+                    f"{collect_run.note or f'exit_code={collect_run.exit_code}'}"
                 ),
                 run_names=["collect"],
             ))

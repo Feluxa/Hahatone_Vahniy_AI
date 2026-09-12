@@ -6,7 +6,7 @@ from pathlib import Path
 
 from harness.contracts import Limits, Mutant, RunKind, RunResult, RunScope, TestLists, TestOutcome, TestReport
 from harness.pytest_ids import canonical_test_id, split_test_id
-from harness.verify.docker import DockerRunner, Mount
+from harness.verify.docker import ContainerOutcome, DockerRunner, Mount
 from harness.verify.junit import parse_junit, with_missing
 
 # Прогон, который применяет эталонное решение и отдаёт получившийся репозиторий наружу.
@@ -16,6 +16,9 @@ APPLY_SOLUTION_COMMAND = ["sh", "-c", "sh /solution/solve.sh && cp -a /app/repo/
 
 # Хвост stderr в note: достаточно, чтобы понять причину, и не раздувает summary.json.
 NOTE_LOG_TAIL = 300
+# Хвост вывода collect: ремонт чинит вслепую, если не видит самой ошибки сборки тестов.
+COLLECT_TAIL_LINES = 30
+COLLECT_TAIL_CHARS = 4000
 
 
 # Применение мутанта-замены внутри контейнера. Требование «якорь ровно один раз» —
@@ -159,6 +162,18 @@ def _log_tail(path: Path, limit: int = NOTE_LOG_TAIL) -> str:
     return text[-limit:]
 
 
+def _log_tail_lines(path: Path, lines: int = COLLECT_TAIL_LINES) -> str:
+    """Последние строки лога: в них лежит сам traceback, по которому чинить."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+    if not text:
+        return ""
+    tail = "\n".join(text.splitlines()[-lines:])
+    return tail[-COLLECT_TAIL_CHARS:]
+
+
 def run_apply_solution(
     task_dir: Path, evidence_dir: Path, image: str, limits: Limits, oracle_repo: Path,
     *, image_digest: str | None = None, runner: DockerRunner | None = None,
@@ -284,8 +299,23 @@ def run_collect(
         report_path=None,
         log_dir="collect",
         tests=collected_tests,
-        note="Timeout expired" if outcome.timed_out else None,
+        note=_collect_note(outcome),
     )
+
+
+def _collect_note(outcome: ContainerOutcome) -> str | None:
+    """Причина неудачной сборки тестов вместе с хвостом вывода pytest.
+
+    Без текста ошибки ремонт не видит, что именно сломано в файле тестов, и три итерации
+    чинит вслепую: сообщение «собранные тесты не сверены со списками» ничего не говорит.
+    """
+    if outcome.timed_out:
+        return "Timeout expired"
+    if outcome.exit_code == 0:
+        return None
+    tail = _log_tail_lines(outcome.stdout_path) or _log_tail_lines(outcome.stderr_path)
+    reason = f"pytest --collect-only завершился с кодом {outcome.exit_code}"
+    return f"{reason}:\n{tail}" if tail else reason
 
 
 LIST_SCOPES: tuple[tuple[str, RunScope], ...] = (
