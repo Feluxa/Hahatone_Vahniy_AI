@@ -125,10 +125,13 @@ def test_unassigned_isolation():
     assert "tests/test_cases.py::test_non_existent" not in lists.all_ids()
     # Дубликат должен быть исключен из p2p в пользу f2p
     assert lists.fail_to_pass == ["tests/test_cases.py::test_f2p_defect"]
-    assert lists.pass_to_pass == ["tests/test_cases.py::test_p2p_normal"]
-    # Нераспределенный test_unassigned_isolation должен попасть в anti_cheat
-    assert "tests/test_cases.py::test_anti_cheat_schema" in lists.anti_cheat
-    assert "tests/test_cases.py::test_unassigned_isolation" in lists.anti_cheat
+    # Нераспределённый test_unassigned_isolation идёт в pass_to_pass: угадывать по имени
+    # нельзя, а тест, который ловит дефект, переложит reclassify_by_outcomes по исходам.
+    assert lists.pass_to_pass == [
+        "tests/test_cases.py::test_p2p_normal",
+        "tests/test_cases.py::test_unassigned_isolation",
+    ]
+    assert lists.anti_cheat == ["tests/test_cases.py::test_anti_cheat_schema"]
     # Проверяем отсутствие дубликатов
     assert len(lists.duplicates()) == 0
 
@@ -340,7 +343,7 @@ def test_prompt_forbids_async_test_functions() -> None:
     assert "async def test_" in prompt
     assert "ЗАПРЕЩЁН" in prompt
     assert "asyncio.run" in prompt
-    assert "tests/settlement/test_preview.py" in prompt
+    assert "существующие тесты компонента из контекста" in prompt
 
 
 def test_prompt_forbids_generated_hashes_and_untrusted_sources() -> None:
@@ -377,7 +380,8 @@ def test_protected_files_keeps_bad_paths_for_validation() -> None:
 def test_prompt_names_the_dsn_environment_variable() -> None:
     prompt = _tests_prompt()
 
-    assert "MERIDIAN_DSN" in prompt
+    assert "CASE_DSN" in prompt
+    assert "CASE_DATABASE_URL" in prompt
     assert "127.0.0.1:5432" in prompt
     assert "psycopg.connect()` без аргументов" in prompt
 
@@ -398,7 +402,7 @@ def test_prompt_restricts_anti_cheat_to_three_templates() -> None:
     assert "ТОЛЬКО из трёх образцов" in prompt
     assert "inspect.signature" in prompt
     assert "information_schema.columns" in prompt
-    assert "table_schema = 'bank_settlement'" in prompt
+    assert "table_schema = '<схема>'" in prompt
     # Пустая выборка из information_schema — не доказательство сохранности схемы.
     assert "выборка пуста" in prompt
 
@@ -409,3 +413,24 @@ def test_prompt_forbids_fake_introspection_checks() -> None:
     for forbidden in ("__origin__", "__args__", "FieldInfo", "model_fields", "hasattr"):
         assert forbidden in prompt, forbidden
     assert "ЗАПРЕЩЕНО проверять типы через" in prompt
+
+
+def test_unassigned_functions_never_guessed_into_fail_to_pass() -> None:
+    """Имя теста ничего не решает: раскладку по факту делает reclassify_by_outcomes."""
+    code = (
+        "def test_refund_boundary():\n    assert True\n\n"
+        "def test_sentinel_untouched():\n    assert True\n\n"
+        "def test_close_window_isolation():\n    assert True\n"
+    )
+
+    files, lists = _align_and_validate_tests(
+        {"test_case.py": code}, ["tests/test_case.py::test_refund_boundary"], [], [],
+    )
+
+    # Только явно объявленный тест попал в fail_to_pass.
+    assert lists.fail_to_pass == ["tests/test_case.py::test_refund_boundary"]
+    assert lists.anti_cheat == []
+    assert lists.pass_to_pass == [
+        "tests/test_case.py::test_sentinel_untouched",
+        "tests/test_case.py::test_close_window_isolation",
+    ]

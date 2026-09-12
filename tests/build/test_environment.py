@@ -10,6 +10,7 @@ import pytest
 from harness.contracts import RunProfile, TestLists
 from harness.build.environment import (
     render_dockerfile,
+    safe_db_name,
     render_conftest,
     render_test_sh,
     write_environment,
@@ -210,13 +211,69 @@ def test_render_conftest_uses_standard_postgres_endpoint() -> None:
         assert f'os.environ["{variable}"]' in content
 
 
-def test_render_conftest_still_exposes_named_dsn() -> None:
+def test_render_conftest_exposes_neutral_dsn_variables() -> None:
+    """Каноническое имя переменной не привязано к проекту, на котором харнесс отлаживали."""
     profile = RunProfile(
         python_version="3.11", requirements_file=None,
         needs_postgres=True, postgres_major=16,
     )
 
-    content = render_conftest(profile)
+    content = render_conftest(profile, "team/case-001")
 
-    assert 'os.environ["MERIDIAN_DSN"]' in content
-    assert 'os.environ["DATABASE_URL"]' in content
+    assert 'os.environ["CASE_DSN"]' in content
+    assert 'os.environ["CASE_DATABASE_URL"]' in content
+    assert "meridian" not in content
+
+
+def test_render_conftest_names_database_after_case_id() -> None:
+    profile = RunProfile(
+        python_version="3.11", requirements_file=None,
+        needs_postgres=True, postgres_major=16,
+    )
+
+    content = render_conftest(profile, "hackathon/settlement-001")
+
+    assert 'CASE_DB_NAME = "hackathon_settlement_001"' in content
+
+
+@pytest.mark.parametrize(("case_id", "expected"), [
+    ("hackathon/settlement-001", "hackathon_settlement_001"),
+    ("team-x/Case_42", "team_x_case_42"),
+    ("123/abc", "case_123_abc"),
+    ("", "case_db"),
+    ("!!!/???", "case_db"),
+])
+def test_safe_db_name(case_id: str, expected: str) -> None:
+    name = safe_db_name(case_id)
+    assert name == expected
+    # Идентификатор PostgreSQL: не длиннее 63 байт и не начинается с цифры.
+    assert len(name) <= 63
+    assert not name[0].isdigit()
+
+
+def test_render_conftest_maps_repository_env_vars_by_format() -> None:
+    """Проект получает строку подключения под своими именами: DSN или URL по формату имени."""
+    profile = RunProfile(
+        python_version="3.11", requirements_file=None,
+        needs_postgres=True, postgres_major=16,
+        env_vars={
+            "MERIDIAN_DSN": "читается в src/db.py",
+            "DATABASE_URL": "читается в migrations/env.py",
+            "APP_SECRET": "читается в src/config.py",
+        },
+    )
+
+    content = render_conftest(profile, "team/case-001")
+    namespace: dict = {}
+    saved_path = list(sys.path)
+    try:
+        exec(compile(content, "conftest.py", "exec"), namespace)  # noqa: S102 - проверяем шаблон
+    finally:
+        sys.path[:] = saved_path
+
+    is_db_var, wants_url = namespace["_is_db_var"], namespace["_wants_url"]
+    assert is_db_var("MERIDIAN_DSN") and not wants_url("MERIDIAN_DSN")
+    assert is_db_var("DATABASE_URL") and wants_url("DATABASE_URL")
+    # Переменная, не имеющая отношения к базе, строку подключения не получает.
+    assert not is_db_var("APP_SECRET")
+    assert os.environ.get("APP_SECRET") is None

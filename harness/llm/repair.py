@@ -27,6 +27,7 @@ from harness.llm.spec_writer import (
     write_spec,
 )
 from harness.llm.test_writer import (
+    DEFAULT_TEST_FILE,
     _align_and_validate_tests,
     _protected_files,
     lists_inconsistent_with_files,
@@ -148,7 +149,7 @@ def _repair_tests(
     system_prompt: str,
 ) -> tuple[dict[str, str], Any, list[str]]:
     """Точечно исправляет тестовые файлы, списки и набор защищаемых файлов."""
-    primary_filename = next(iter(draft.test_files.keys()), "test_settlement_close.py")
+    primary_filename = next(iter(draft.test_files.keys()), DEFAULT_TEST_FILE)
     test_code = draft.test_files.get(primary_filename, "")
 
     user_prompt = (

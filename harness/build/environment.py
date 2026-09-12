@@ -12,12 +12,29 @@
 from __future__ import annotations
 
 import shutil
+import re
 from pathlib import Path
 from string import Template
 
 from harness.contracts import RunProfile, TestLists
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+DEFAULT_DB_NAME = "case_db"
+UNSAFE_DB_CHARS = re.compile(r"[^a-z0-9_]+")
+
+
+def safe_db_name(case_id: str) -> str:
+    """Имя базы из case_id: нижний регистр, только буквы, цифры и подчёркивание.
+
+    Идентификатор PostgreSQL не может начинаться с цифры и длиннее 63 байт не бывает.
+    """
+    cleaned = UNSAFE_DB_CHARS.sub("_", case_id.strip().lower()).strip("_")
+    if not cleaned:
+        return DEFAULT_DB_NAME
+    if not cleaned[0].isalpha():
+        cleaned = f"case_{cleaned}"
+    return cleaned[:63]
 
 
 def render_dockerfile(profile: RunProfile) -> str:
@@ -39,10 +56,11 @@ def render_dockerfile(profile: RunProfile) -> str:
     return Template(tmpl_str).substitute(mapping)
 
 
-def render_conftest(profile: RunProfile) -> str:
+def render_conftest(profile: RunProfile, case_id: str = "") -> str:
     tmpl_path = TEMPLATES_DIR / "conftest.py.tmpl"
     tmpl_str = tmpl_path.read_text(encoding="utf-8")
     mapping = {
+        "db_name": safe_db_name(case_id),
         "pytest_pythonpath": repr(profile.pytest_pythonpath),
         "needs_postgres": "True" if profile.needs_postgres else "False",
         "postgres_major": str(profile.postgres_major or 16),

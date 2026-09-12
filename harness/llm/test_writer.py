@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# Имя файла тестов, когда модель его не назвала. Нейтральное: кейс собирается
+# по любому репозиторию, а не только по тому, на котором харнесс отлаживали.
+DEFAULT_TEST_FILE = "test_case.py"
+
 
 def _load_prompt(filename: str) -> str:
     path = PROMPTS_DIR / filename
@@ -198,7 +202,7 @@ def _align_and_validate_tests(
     # Данные рядом с тестами (эталоны .expected, фикстуры) тестами не являются: привязывать
     # к ним идентификаторы нельзя, иначе ID уедет на файл, который pytest не собирает.
     sources = {name: code for name, code in test_files.items() if name.endswith(".py")}
-    primary_filename = next(iter(sources), "test_cases.py")
+    primary_filename = next(iter(sources), DEFAULT_TEST_FILE)
     funcs_by_file: dict[str, list[str]] = {
         name: _extract_test_functions_from_ast(code) for name, code in sources.items()
     }
@@ -222,18 +226,15 @@ def _align_and_validate_tests(
     p2p = [x for x in p2p if x not in f2p_set and x not in ac_set]
 
     # Проверяем нераспределенные функции из AST
+    # Нераспределённые функции идут в pass_to_pass: это единственный список, попадание в
+    # который ничего не утверждает заранее. Угадывать по имени теста нельзя — словарь из слов
+    # одного проекта на чужом репозитории раскладывает наугад, а тест, который на самом деле
+    # ловит дефект, переложит reclassify_by_outcomes по фактическим исходам base и oracle.
     assigned_ids = {*f2p, *p2p, *ac}
     for filename, funcs in funcs_by_file.items():
         for func in funcs:
             canon_id = make_test_id(filename, func)
-            if canon_id in assigned_ids:
-                continue
-            lower = func.lower()
-            if any(k in lower for k in ("cheat", "isolation", "schema", "sentinel", "signature", "untrusted")):
-                ac.append(canon_id)
-            elif any(k in lower for k in ("refund", "defect", "fail", "boundary", "close_window")):
-                f2p.append(canon_id)
-            else:
+            if canon_id not in assigned_ids:
                 p2p.append(canon_id)
 
     return test_files, TestLists(fail_to_pass=f2p, pass_to_pass=p2p, anti_cheat=ac)
@@ -303,7 +304,7 @@ def write_tests(
         repair_user = (
             f"Не удалось разобрать ответ как JSON с тестами: {err}\n"
             f"Верни СТРОГО валидный JSON-объект со следующими ключами:\n"
-            f"- test_file_name (например, 'test_settlement_close.py')\n"
+            f"- test_file_name (например, '{DEFAULT_TEST_FILE}')\n"
             f"- test_file_content (полный Python код тестов pytest)\n"
             f"- fail_to_pass (массив полных ID тестов)\n"
             f"- pass_to_pass (массив полных ID тестов)\n"
@@ -314,7 +315,7 @@ def write_tests(
         )
         data = extract_json(retry_resp.text)
 
-    filename = str(data.get("test_file_name", "test_settlement_close.py")).strip()
+    filename = str(data.get("test_file_name", DEFAULT_TEST_FILE)).strip()
     if not filename.endswith(".py"):
         filename += ".py"
 

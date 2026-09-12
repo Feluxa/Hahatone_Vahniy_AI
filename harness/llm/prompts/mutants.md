@@ -29,16 +29,16 @@
   {
     "name": "llm-mutant-boundary-inclusive",
     "description": "Использование нестрогого <= на стыке суток в SQL-запросе",
-    "file_path": "sql/061_refresh_daily_settlement.sql",
-    "anchor": "    AND e.occurred_at < v_end;",
-    "replacement": "    AND e.occurred_at <= v_end;"
+    "file_path": "<путь из solve.sh>",
+    "anchor": "<строка после решения, ровно одно вхождение>",
+    "replacement": "<та же строка с внесённой ошибкой>"
   },
   {
     "name": "llm-mutant-refund-sign",
     "description": "Возвраты прибавляются вместо вычитания",
-    "file_path": "backend/src/components/settlement/application/impl/services/NettingPolicy.py",
-    "anchor": "net = purchases - refunds",
-    "replacement": "net = purchases + refunds"
+    "file_path": "<другой путь из solve.sh>",
+    "anchor": "<другая строка после решения>",
+    "replacement": "<та же строка с внесённой ошибкой>"
   }
 ]
 ```

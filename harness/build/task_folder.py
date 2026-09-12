@@ -81,7 +81,7 @@ def write_task_folder(
 
         tests_dir = task_dir / TESTS_DIR
         _write(tests_dir / "test.sh", render_test_sh(draft.lists))
-        _write(tests_dir / "conftest.py", render_conftest(profile))
+        _write(tests_dir / "conftest.py", render_conftest(profile, case.case_id))
         for relative_path, content in draft.test_files.items():
             _write(tests_dir / relative_path, content)
         _copy_protected(draft.protected_files, workspace_repo, tests_dir)

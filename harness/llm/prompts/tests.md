@@ -17,17 +17,17 @@
          `protected_files`.
 
      (б) ПУБЛИЧНЫЙ API НЕ ИЗМЕНЁН — `inspect.signature` с ТОЧНЫМ списком имён параметров
-         и явным набором полей модели (образец — `golden/settlement-001`):
+         и явным набором полей модели:
          ```python
          import inspect
 
          def test_public_signatures_kept() -> None:
-             sig = inspect.signature(IPreviewSettlementQuery.__call__)
+             sig = inspect.signature(<ИнтерфейсИзКонтекста>.__call__)
              assert set(sig.parameters) == {"self", "request"}
 
-             fields = set(SettlementModel.__annotations__)
-             assert {"tenant_id", "merchant_id", "business_date", "currency",
-                     "net_amount"}.issubset(fields)
+             fields = set(<МодельИзКонтекста>.__annotations__)
+             assert {"<поле_1>", "<поле_2>",
+                     "<поле_3>"}.issubset(fields)
          ```
          Имена бери из раздела «Символы Python» контекста. ЗАПРЕЩЕНО проверять типы через
          `__origin__`, `__args__`, `FieldInfo`, `model_fields`, `hasattr(...)` и прочую
@@ -35,21 +35,21 @@
 
      (в) СХЕМА БД НЕ ИЗМЕНЕНА — запрос к `information_schema.columns` с ЯВНЫМ `table_schema`.
          Имя схемы и таблицы возьми из раздела «Объекты SQL» контекста (`qualname` вида
-         `bank_settlement.daily_settlement`), не угадывай:
+         `<схема>.<таблица>`), не угадывай:
          ```python
          def test_schema_unchanged() -> None:
-             with psycopg.connect(os.environ["MERIDIAN_DSN"]) as conn:
+             with psycopg.connect(os.environ["CASE_DSN"]) as conn:
                  with conn.cursor() as cur:
                      cur.execute("""
                          SELECT column_name, data_type
                          FROM information_schema.columns
-                         WHERE table_schema = 'bank_settlement'
-                           AND table_name = 'daily_settlement'
+                         WHERE table_schema = '<схема>'
+                           AND table_name = '<таблица>'
                          ORDER BY column_name;
                      """)
                      columns = {row[0]: row[1] for row in cur.fetchall()}
              assert columns, "выборка пуста: схема или таблица названы неверно"
-             for name in ("business_date", "currency", "net_amount", "purchase_amount"):
+             for name in ("<колонка_1>", "<колонка_2>", "<колонка_3>"):
                  assert name in columns
          ```
          Обязательно проверь, что выборка НЕ ПУСТАЯ, отдельным assert: пустой результат
@@ -66,7 +66,7 @@
      БУКВАЛЬНО, строкой: `Path(__file__).parent / "expected" / "<относительный путь>.expected"`,
      где `<относительный путь>` — тот же путь, что в `protected_files`, а `.expected`
      дописан к полному имени файла вместе с его расширением.
-     Скопируй этот фрагмент и подставь свой путь (образец — `golden/settlement-001`):
+     Скопируй этот фрагмент и подставь свой путь:
      ```python
      import os
      from pathlib import Path
@@ -95,14 +95,14 @@
    - В тестах КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНЫ `skip`, `xfail`, `pytest.importorskip`.
    - Изоляция данных: используй уникальный `tenant_id` для каждого теста (например, `t_sql_refund`, `t_prev_test`), чтобы тесты не влияли друг на друга.
    - Подключение к БД бери ТОЛЬКО из переменной окружения, которую выставляет фикстура
-     `postgres_service` в `tests/conftest.py`. Она называется `MERIDIAN_DSN` (строка libpq);
-     для SQLAlchemy есть `DATABASE_URL`. Сама база поднимается на `127.0.0.1:5432`,
-     имя базы `meridian`, пользователь `postgres`:
+     `postgres_service` в `tests/conftest.py`. Она называется `CASE_DSN` (строка libpq);
+     для SQLAlchemy есть `CASE_DATABASE_URL`. Сама база поднимается на `127.0.0.1:5432`,
+     пользователь `postgres`, имя базы фикстура выбирает сама:
      ```python
      import os
      import psycopg
 
-     dsn = os.environ["MERIDIAN_DSN"]
+     dsn = os.environ["CASE_DSN"]
      with psycopg.connect(dsn) as conn:
          with conn.cursor() as cur:
              cur.execute("SELECT net_amount FROM ...")
@@ -112,14 +112,14 @@
      без плагина вроде pytest-asyncio такой тест не выполняется, а считается пройденным,
      и проверка получается фиктивной.
    - Асинхронный код вызывается через `asyncio.run(...)` внутри синхронного теста. Образец —
-     `tests/settlement/test_preview.py` в самом репозитории:
+     существующие тесты компонента из контекста репозитория:
      ```python
      def test_preview_purchases() -> None:
          async def scenario() -> None:
              async with container() as scope:
-                 query = await scope.get(IPreviewSettlementQuery)
+                 query = await scope.get(<ИнтерфейсИзКонтекста>)
                  result = await query(request)
-                 assert result.net_amount == Decimal("12.4500")
+                 assert result.<поле> == <ожидаемое значение>
 
          asyncio.run(scenario())
      ```
@@ -127,24 +127,24 @@
 
 3. Идентификаторы тестов:
    - Полный ID в списках должен иметь вид: `tests/<test_file_name>::<function_name>`, например:
-     `tests/test_settlement_close.py::test_sql_refund_reduces_net`
+     `tests/test_case.py::test_<что_проверяется>`
 
 ФОРМАТ ОТВЕТА (строгий JSON):
 ```json
 {
-  "test_file_name": "test_settlement_close.py",
+  "test_file_name": "test_case.py",
   "test_file_content": "import asyncio\nimport os\n...\ndef test_...():\n    assert ...\n",
   "protected_files": [
     "DOCS/release_sentinel.txt"
   ],
   "fail_to_pass": [
-    "tests/test_settlement_close.py::test_func_1"
+    "tests/test_case.py::test_func_1"
   ],
   "pass_to_pass": [
-    "tests/test_settlement_close.py::test_func_2"
+    "tests/test_case.py::test_func_2"
   ],
   "anti_cheat": [
-    "tests/test_settlement_close.py::test_func_3"
+    "tests/test_case.py::test_func_3"
   ]
 }
 ```

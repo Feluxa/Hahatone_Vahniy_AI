@@ -33,6 +33,26 @@ ENV_VAR_SOURCES = $env_vars
 # (psycopg.connect(), psql без -p), обязан попадать в эту же базу.
 POSTGRES_PORT = 5432
 POSTGRES_LISTEN = "127.0.0.1"
+POSTGRES_USER = "postgres"
+
+# Имя базы выводится из case_id: у каждого кейса своя, без привязки к конкретному проекту.
+CASE_DB_NAME = "$db_name"
+
+# Имена переменных, в которые проект кладёт строку подключения, и формат каждой.
+# ENV_VAR_SOURCES знает, какие переменные читает сам репозиторий; DSN или SQLAlchemy-URL
+# выбирается по имени, поэтому DATABASE_URL получает URL, а <ЧТО_УГОДНО>_DSN — строку libpq.
+DB_VAR_HINTS = ("DSN", "DATABASE", "POSTGRES", "PGHOST", "DB_URL", "DB_URI")
+URL_VAR_HINTS = ("URL", "URI")
+
+
+def _is_db_var(name: str) -> bool:
+    upper = name.upper()
+    return any(hint in upper for hint in DB_VAR_HINTS)
+
+
+def _wants_url(name: str) -> bool:
+    upper = name.upper()
+    return any(hint in upper for hint in URL_VAR_HINTS)
 
 
 def _run_as_postgres(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -108,22 +128,27 @@ def postgres_service():
         raise RuntimeError(f"PostgreSQL failed to start on port {port}. Log:\n{log_content}")
 
     # Создаем базу данных
-    db_name = "meridian"
-    cmd_create = [createdb_bin, "-h", "127.0.0.1", "-p", str(port), "-U", "postgres", db_name]
+    db_name = CASE_DB_NAME
+    cmd_create = [createdb_bin, "-h", POSTGRES_LISTEN, "-p", str(port), "-U", POSTGRES_USER, db_name]
     subprocess.run(cmd_create, check=True)
 
-    # Выставляем переменные окружения
-    db_url = f"postgresql+psycopg://postgres@127.0.0.1:{port}/{db_name}"
-    dsn = f"host=127.0.0.1 port={port} dbname={db_name} user=postgres"
-    os.environ["DATABASE_URL"] = db_url
-    os.environ["MERIDIAN_DSN"] = dsn
+    # Канонические переменные кейса: тесты берут подключение отсюда.
+    db_url = f"postgresql+psycopg://{POSTGRES_USER}@{POSTGRES_LISTEN}:{port}/{db_name}"
+    dsn = f"host={POSTGRES_LISTEN} port={port} dbname={db_name} user={POSTGRES_USER}"
+    os.environ["CASE_DSN"] = dsn
+    os.environ["CASE_DATABASE_URL"] = db_url
+
+    # Переменные, которые читает сам репозиторий, — под его собственными именами.
+    for _name in ENV_VAR_SOURCES:
+        if _is_db_var(_name):
+            os.environ[_name] = db_url if _wants_url(_name) else dsn
 
     # Стандартные переменные libpq: с ними psycopg.connect() и psql без аргументов
     # попадают в эту же базу, а не в базу по имени текущего пользователя (root).
     os.environ["PGHOST"] = POSTGRES_LISTEN
     os.environ["PGPORT"] = str(port)
     os.environ["PGDATABASE"] = db_name
-    os.environ["PGUSER"] = "postgres"
+    os.environ["PGUSER"] = POSTGRES_USER
 
     # Выполняем миграции ПОСЛЕ решения
     if MIGRATION_CMD:
@@ -134,7 +159,8 @@ def postgres_service():
         seed_path = Path("/app/repo") / seed_file if not os.path.isabs(seed_file) else Path(seed_file)
         if seed_path.exists():
             subprocess.run(
-                [psql_bin, "-h", "127.0.0.1", "-p", str(port), "-U", "postgres", "-d", db_name, "-v", "ON_ERROR_STOP=1", "-f", str(seed_path)],
+                [psql_bin, "-h", POSTGRES_LISTEN, "-p", str(port), "-U", POSTGRES_USER,
+                 "-d", db_name, "-v", "ON_ERROR_STOP=1", "-f", str(seed_path)],
                 check=True,
             )
 
