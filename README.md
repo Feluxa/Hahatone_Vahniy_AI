@@ -55,7 +55,9 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | protocol.input, protocol.output (№1) | готово | `load_input` собирает все проблемы входа сразу; `write_result` пишет `result.json` атомарно; `tests/protocol/` |
 | repo.trust (№1) | готово | `find_untrusted`, `find_untrusted_with_reasons`, `find_injection_targets`; признаки общие, код недоверенным не становится; `tests/repo/test_trust.py` |
 | repo.profile (№1) | готово | `detect_run_profile(repo) -> RunProfile`; деградирует до дефолтов, `ProfileError` только на структурных проблемах; `tests/repo/test_profile.py` |
-| repo (остальное), manifest, task_folder (№1) | заглушки | |
+| repo.python_index, repo.sql_index (№1) | готово | `index_python` (+`find_imports`), `index_sql`; `tests/repo/test_python_index.py`, `test_sql_index.py` |
+| repo.context (№1) | готово | `build_context(repo, brief, max_files=20)`; на meridian — 20 файлов, без `components/lending` и `payments`; `fixtures/repo_context.settlement.json` (перегенерация — `.venv/Scripts/python.exe -m tests.repo.regen_settlement_fixture`) |
+| manifest, task_folder (№1) | заглушки | |
 | environment, verify, summary, golden (№3) | заглушки | |
 | llm, usage (№2) | заглушки | |
 | pipeline, cli, static_checks (№4) | заглушки | |

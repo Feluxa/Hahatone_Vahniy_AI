@@ -17,4 +17,10 @@
 - `repo_context.settlement.json` — вывод `build_context` на meridian с брифом settlement-001 (№1);
 - `runs.golden.json` и `verdict.golden.json` — прогон эталонного кейса (№3).
 
+`repo_context.settlement.json` сравнивается с текущим выводом в `tests/repo/test_context.py`, поэтому после правки эвристики отбора его надо перегенерировать (нужны выложенные `materials/`):
+
+```sh
+.venv/Scripts/python.exe -m tests.repo.regen_settlement_fixture
+```
+
 Все файлы проверяются в `tests/test_contracts.py`: при изменении контрактов обновляйте их в том же коммите.
