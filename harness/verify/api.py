@@ -151,12 +151,12 @@ def verify_case(
                 runner=runner,
             )
 
-    # 5. Статические проверки (если модуль реализован)
+    # 5. Статические проверки (владелец: №4)
     static_problems: list[Problem] = []
     try:
         from harness.verify.static_checks import check_task_folder
-        static_problems = check_task_folder(task_dir)
-    except (ImportError, NotImplementedError, AttributeError):
+        static_problems = check_task_folder(task_dir, lists)
+    except (ImportError, NotImplementedError, AttributeError, TypeError):
         pass
 
     all_runs = [build_run, collect_run, *base_oracle_runs, *mutant_runs]

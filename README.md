@@ -25,7 +25,7 @@ py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m harness run materials/hackathon-participants/inputs/settlement.json
 ```
 
-Пока пайплайн не реализован, команда завершается с кодом 1. Коды выхода: 0 — `ready`, 1 — `failed`, 2 — некорректный вход.
+Коды выхода: 0 — `ready`, 1 — `failed`, 2 — некорректный вход.
 
 ## Структура и владельцы
 
@@ -74,11 +74,7 @@ py -3.11 -m venv .venv
 | llm.solution_writer (№2) | готово | `write_solution`, безопасные замены с `count(anchor)==1`, валидация запретов; `tests/llm/test_solution_writer.py` |
 | llm.mutant_writer (№2) | готово | `write_mutants`, генерация и нормализация unified diff; `tests/llm/test_mutant_writer.py` |
 | llm.repair (№2) | готово | `repair` (точечный ремонт по target), `create_case_draft` (сквозной сборщик); `tests/llm/test_repair.py` |
-| verify.static_checks (№4) | заглушка | `check_task_folder(task_dir, lists) -> list[Problem]` поднимает `NotImplementedError`; следующий шаг |
-| cli (№4) | заглушка | `python -m harness run <input>` разбирает аргументы и выходит с кодом 1 |
-| pipeline (№4) | заглушка | `run(case) -> CaseResult` поднимает `NotImplementedError`; `MAX_REPAIR_ITERATIONS = 3` |
-
-Порядок работы №4: `static_checks.py` → `cli.py` → `pipeline.py`, с остановкой на коммит после каждого.
+| pipeline, cli, static_checks (№4) | готово | пайплайн полностью интегрирован, работает статический анализ task/, cli возвращает коды выхода |
 
 ### Эталонный хэш снимка
 
