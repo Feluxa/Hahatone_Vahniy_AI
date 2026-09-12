@@ -58,8 +58,13 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | repo.python_index, repo.sql_index (№1) | готово | `index_python` (+`find_imports`), `index_sql`; `tests/repo/test_python_index.py`, `test_sql_index.py` |
 | repo.context (№1) | готово | `build_context(repo, brief, max_files=20)`; на meridian — 20 файлов, без `components/lending` и `payments`; `fixtures/repo_context.settlement.json` (перегенерация — `.venv/Scripts/python.exe -m tests.repo.regen_settlement_fixture`) |
 | manifest, task_folder (№1) | заглушки | |
-| environment, verify, summary, golden (№3) | готово | покрыто tests/verify/ и tests/build/ |
-| llm, usage (№2) | заглушки | |
+| environment, verify, summary, golden (№3) | готово | покрыто `tests/verify/` и `tests/build/` |
+| llm.client, llm.parsing, evidence.usage (№2) | готово | GigaChat-3-Ultra, парсинг JSON/файлов/патчей, `.env.example`, `write_usage`; `tests/llm/`, `tests/evidence/test_usage.py` |
+| llm.spec (№2) | готово | `write_spec`, `write_instruction`, защита от утечек и инъекций; `tests/llm/test_spec_writer.py` |
+| llm.test (№2) | готово | `write_tests`, AST-парсинг функций, канонизация ID, три списка без дублей; `tests/llm/test_test_writer.py` |
+| llm.solution (№2) | готово | `write_solution`, безопасные замены с `count(anchor)==1`, валидация запретов; `tests/llm/test_solution_writer.py` |
+| llm.mutants (№2) | готово | `write_mutants`, генерация и нормализация unified diff; `tests/llm/test_mutant_writer.py` |
+| llm.repair (№2) | готово | `repair` (точечный ремонт по target), `create_case_draft` (сквозной сборщик); `tests/llm/test_repair.py` |
 | pipeline, cli, static_checks (№4) | заглушки | |
 
 ### Эталонный хэш снимка

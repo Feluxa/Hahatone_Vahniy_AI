@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -12,9 +12,10 @@ runs/
 out/
 *.log
 
-# РЎРµРєСЂРµС‚С‹
+# Секреты
 .env
 .env.*
+!.env.example
 
 # РћРЎ Рё СЂРµРґР°РєС‚РѕСЂС‹
 .DS_Store
