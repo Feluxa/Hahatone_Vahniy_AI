@@ -31,5 +31,8 @@
   },
   "solution_files": {
     "solve.sh": "#!/bin/sh\nset -eu\n(правки /app/repo)\n"
-  }
+  },
+  "protected_files": [
+    "DOCS/release_sentinel.txt"
+  ]
 }

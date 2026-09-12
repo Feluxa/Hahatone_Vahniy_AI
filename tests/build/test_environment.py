@@ -1,5 +1,11 @@
-from pathlib import Path
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
+from pathlib import Path
+
+import pytest
 
 from harness.contracts import RunProfile, TestLists
 from harness.build.environment import (
@@ -65,9 +71,47 @@ def test_render_test_sh() -> None:
         anti_cheat=["tests/test_c.py::test_4"],
     )
     content = render_test_sh(lists)
-    assert "expected = int('4')" in content
+    assert "EXPECTED_TESTS='4'" in content
     assert "/logs/verifier/reward.txt" in content
     assert "/logs/verifier/tests.xml" in content
+
+
+def test_render_test_sh_expects_argument_count_for_list_runs() -> None:
+    """Прогон по одному списку ожидает столько тестов, сколько ID ему передали.
+
+    С зашитым общим числом тестов прогон по списку не мог получить reward 1 никогда —
+    в том числе oracle/pass_to_pass, где все тесты проходят.
+    """
+    lists = TestLists(
+        fail_to_pass=["tests/test_a.py::test_1", "tests/test_a.py::test_2"],
+        pass_to_pass=["tests/test_b.py::test_3"],
+        anti_cheat=["tests/test_c.py::test_4"],
+    )
+    content = render_test_sh(lists)
+
+    # Без аргументов — полное число тестов из манифеста, с аргументами — их количество.
+    assert "EXPECTED_TESTS='4'" in content
+    assert 'EXPECTED_TESTS="$#"' in content
+    assert "export EXPECTED_TESTS" in content
+    assert "int(os.environ['EXPECTED_TESTS'])" in content
+    # Старая форма с числом, зашитым в тело проверки, не должна остаться.
+    assert "int('4')" not in content
+
+
+def test_render_test_sh_is_valid_posix_sh(tmp_path: Path) -> None:
+    if shutil.which("sh") is None:
+        pytest.skip("нужен POSIX sh для проверки синтаксиса")
+    lists = TestLists(
+        fail_to_pass=["tests/test_a.py::test_1"],
+        pass_to_pass=[],
+        anti_cheat=[],
+    )
+    script = tmp_path / "test.sh"
+    script.write_bytes(render_test_sh(lists).encode("utf-8"))
+
+    result = subprocess.run(["sh", "-n", str(script)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
 
 
 def test_write_environment_cleans_repo() -> None:
@@ -106,3 +150,73 @@ def test_write_environment_cleans_repo() -> None:
         assert not (env_dir / "repo" / ".venv").exists()
         assert not (env_dir / "repo" / "__pycache__").exists()
         assert not (env_dir / "repo" / ".DS_Store").exists()
+
+
+def test_render_conftest_does_not_set_env_vars_from_descriptions() -> None:
+    """env_vars профиля — это «имя -> где встретилась», а не значения переменных.
+
+    Раньше conftest делал os.environ.setdefault(имя, описание), и проект получал
+    в DATABASE_URL фразу «читается в backend/migrations/env.py» вместо строки подключения.
+    """
+    profile = RunProfile(
+        python_version="3.11",
+        requirements_file="requirements.lock",
+        pytest_pythonpath=["backend/src"],
+        needs_postgres=True,
+        postgres_major=16,
+        env_vars={
+            "DATABASE_URL": "читается в backend/migrations/env.py",
+            "APP_SECRET": "читается в backend/src/config.py",
+        },
+    )
+
+    content = render_conftest(profile)
+    compile(content, "conftest.py", "exec")
+
+    assert "os.environ.setdefault" not in content
+    assert "ENV_VAR_SOURCES" in content
+    # Описания остаются как справка, но в окружение не попадают.
+    assert "читается в backend/migrations/env.py" in content
+
+    # Исполняем шаблон: раньше на этом месте описания уезжали прямо в os.environ.
+    namespace: dict = {}
+    saved_path = list(sys.path)
+    try:
+        exec(compile(content, "conftest.py", "exec"), namespace)  # noqa: S102 - проверяем сам шаблон
+    finally:
+        sys.path[:] = saved_path
+    assert namespace["ENV_VAR_SOURCES"]["APP_SECRET"] == "читается в backend/src/config.py"
+    assert os.environ.get("APP_SECRET") is None
+    assert os.environ.get("DATABASE_URL") != "читается в backend/migrations/env.py"
+
+
+def test_render_conftest_uses_standard_postgres_endpoint() -> None:
+    """База слушает 127.0.0.1:5432, иначе тест с psycopg.connect() не подключится."""
+    profile = RunProfile(
+        python_version="3.11", requirements_file=None,
+        needs_postgres=True, postgres_major=16,
+    )
+
+    content = render_conftest(profile)
+    compile(content, "conftest.py", "exec")
+
+    assert "POSTGRES_PORT = 5432" in content
+    assert 'POSTGRES_LISTEN = "127.0.0.1"' in content
+    assert "listen_addresses={POSTGRES_LISTEN}" in content
+    # Случайный порт был причиной "connection to 127.0.0.1:5432 refused".
+    assert "_get_free_port" not in content
+    # Стандартные переменные libpq: с ними работает и подключение без аргументов.
+    for variable in ("PGHOST", "PGPORT", "PGDATABASE", "PGUSER"):
+        assert f'os.environ["{variable}"]' in content
+
+
+def test_render_conftest_still_exposes_named_dsn() -> None:
+    profile = RunProfile(
+        python_version="3.11", requirements_file=None,
+        needs_postgres=True, postgres_major=16,
+    )
+
+    content = render_conftest(profile)
+
+    assert 'os.environ["MERIDIAN_DSN"]' in content
+    assert 'os.environ["DATABASE_URL"]' in content

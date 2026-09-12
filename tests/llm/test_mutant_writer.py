@@ -17,7 +17,7 @@ from harness.contracts import (
 )
 from harness.llm.client import LlmClient, LlmResponse
 from harness.llm.mutant_writer import (
-    _normalize_patch,
+    _replacement_problem,
     _sanitize_name,
     write_mutants,
 )
@@ -56,23 +56,22 @@ def sample_context() -> RepoContext:
     )
 
 
-def test_normalize_patch() -> None:
-    # Валидный патч с a/ и b/
-    valid = "--- a/file.py\n+++ b/file.py\n@@ -1,1 +1,1 @@\n-old\n+new\n"
-    assert _normalize_patch(valid) == valid
+def test_replacement_problem_accepts_valid_mutant() -> None:
+    assert _replacement_problem("sql/061.sql", "a < b", "a <= b") is None
 
-    # Патч без a/ и b/ префиксов
-    no_prefix = "--- file.py\n+++ file.py\n@@ -1,1 +1,1 @@\n-old\n+new\n"
-    norm = _normalize_patch(no_prefix)
-    assert norm is not None
-    assert "--- a/file.py" in norm
-    assert "+++ b/file.py" in norm
 
-    # Патч без @@ (не unified diff)
-    assert _normalize_patch("--- a/f\n+++ b/f\n-old\n+new") is None
-
-    # Патч без изменений (+/-)
-    assert _normalize_patch("--- a/f\n+++ b/f\n@@ -1 +1 @@\n context") is None
+@pytest.mark.parametrize(("file_path", "anchor", "replacement", "expected"), [
+    ("", "a", "b", "нет file_path"),
+    ("/etc/passwd", "a", "b", "относительным"),
+    ("../outside.py", "a", "b", "за пределы"),
+    ("sql" + chr(92) + "061.sql", "a", "b", "относительным"),
+    ("sql/061.sql", "   ", "b", "пустой anchor"),
+    ("sql/061.sql", "same", "same", "совпадает"),
+])
+def test_replacement_problem_rejects(file_path, anchor, replacement, expected) -> None:
+    problem = _replacement_problem(file_path, anchor, replacement)
+    assert problem is not None
+    assert expected in problem
 
 
 def test_sanitize_name() -> None:
@@ -83,12 +82,16 @@ def test_sanitize_name() -> None:
 
 def test_write_mutants_success(sample_context: RepoContext, sample_draft: CaseDraft) -> None:
     mock_client = MagicMock(spec=LlmClient)
-    sample_patch = "--- a/NettingPolicy.py\n+++ b/NettingPolicy.py\n@@ -10,3 +10,3 @@\n-net = purchases - refunds\n+net = purchases + refunds\n"
+    sample_mutant = {
+        "file_path": "NettingPolicy.py",
+        "anchor": "net = purchases - refunds",
+        "replacement": "net = purchases + refunds",
+    }
     mutants_data = [
         {
             "name": "sign-inversion",
             "description": "Инвертирован знак вычитания возвратов",
-            "patch": sample_patch,
+            **sample_mutant,
         }
     ]
     mock_client.complete.return_value = LlmResponse(
@@ -107,19 +110,23 @@ def test_write_mutants_success(sample_context: RepoContext, sample_draft: CaseDr
     assert m.name == "llm-mutant-sign-inversion"
     assert m.source == MutantSource.LLM
     assert m.description == "Инвертирован знак вычитания возвратов"
-    assert m.patch == sample_patch
+    assert m.patch == ""
+    assert m.is_replacement is True
+    assert m.file_path == "NettingPolicy.py"
+    assert m.anchor == "net = purchases - refunds"
+    assert m.replacement == "net = purchases + refunds"
     assert mock_client.complete.call_args.kwargs["purpose"] == "mutants"
 
 
 def test_write_mutants_wrapped_in_dict(sample_context: RepoContext, sample_draft: CaseDraft) -> None:
     mock_client = MagicMock(spec=LlmClient)
-    sample_patch = "--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-1\n+2\n"
+    sample_mutant = {"file_path": "app.py", "anchor": "value = 1", "replacement": "value = 2"}
     payload = {
         "mutants": [
             {
                 "name": "mutant-wrap",
                 "description": "Wrapped mutant",
-                "patch": sample_patch,
+                **sample_mutant,
             }
         ]
     }
@@ -138,8 +145,8 @@ def test_write_mutants_wrapped_in_dict(sample_context: RepoContext, sample_draft
 
 def test_write_mutants_repair_on_bad_json(sample_context: RepoContext, sample_draft: CaseDraft) -> None:
     mock_client = MagicMock(spec=LlmClient)
-    sample_patch = "--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-1\n+2\n"
-    good_data = [{"name": "repaired", "description": "d", "patch": sample_patch}]
+    sample_mutant = {"file_path": "app.py", "anchor": "value = 1", "replacement": "value = 2"}
+    good_data = [{"name": "repaired", "description": "d", **sample_mutant}]
 
     mock_client.complete.side_effect = [
         LlmResponse(text="Broken JSON", model="GigaChat-3-Ultra", input_tokens=300, output_tokens=20, duration_sec=0.5),

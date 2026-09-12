@@ -8,5 +8,8 @@
     "repeat/oracle/full",
     "mutant/hunk-1",
     "mutant/hunk-2"
+  ],
+  "notes": [
+    "тест tests/test_settlement.py::test_boundary перенесён в fail_to_pass по фактическим исходам"
   ]
 }

@@ -64,6 +64,21 @@ def check_task_folder(task_dir: Path, lists: TestLists) -> list[Problem]:
             try:
                 tree = ast.parse(test_file.read_text(encoding="utf-8"))
                 for node in ast.walk(tree):
+                    # async def test_*: без pytest-asyncio такой тест не выполняется, а
+                    # засчитывается пройденным — проверка получается фиктивной. Ловим до
+                    # запуска контейнеров, чтобы это ушло в ремонт, а не в ложный ready.
+                    if isinstance(node, ast.AsyncFunctionDef) and node.name.startswith("test_"):
+                        problems.append(
+                            Problem(
+                                category=ProblemCategory.FORBIDDEN_MARKERS,
+                                target=RepairTarget.TESTS,
+                                details=(
+                                    f"Асинхронный тест async def {node.name} в {test_file.name}: "
+                                    f"тестовая функция должна быть синхронной, "
+                                    f"асинхронный код вызывается через asyncio.run(...) внутри неё"
+                                )
+                            )
+                        )
                     # Ловим: pytest.skip(), pytest.mark.skip, pytest.mark.xfail и т.д.
                     if isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_MARKERS:
                         if _has_pytest_root(node.value):

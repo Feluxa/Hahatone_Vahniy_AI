@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 
 from harness.contracts import TASK_SCHEMA_VERSION, CaseInput, CaseSpec, TestLists
+from harness.pytest_ids import canonical_test_id
 
 TASK_TYPE = "agentic"
 BUILD_TOOL = "docker"
@@ -103,13 +104,62 @@ def read_test_lists(task_toml: Path) -> TestLists:
         elif not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
             problems.append(f"{name}: ожидается массив строк")
         else:
-            values[name] = raw
+            # Канон тот же, что у черновика и у прогона collect: сверять множества ID можно
+            # только после приведения к одному виду, иначе tests/t.py::a и t.py::a разойдутся.
+            values[name] = [canonical_test_id(item) for item in raw]
     if problems:
         raise ManifestError(problems)
 
     lists = TestLists(**values)
     _check(lists)
     return lists
+
+
+def rewrite_test_lists(task_toml: Path, lists: TestLists) -> None:
+    """Переписывает три массива в готовом task.toml, не трогая остальное.
+
+    Нужна верификации: она может переложить тест между списками по фактическим исходам
+    прогонов, и манифест обязан догнать это изменение. Полный рендер тут не годится —
+    CaseInput и CaseSpec до верификации не доезжают, а остальные поля менять не за чем.
+    """
+    _check(lists)
+    try:
+        text = task_toml.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ManifestError([f"{task_toml}: файл не читается: {error}"]) from error
+
+    lines = text.splitlines(keepends=True)
+    result: list[str] = []
+    replaced: set[str] = set()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        name = _array_name(line)
+        if name is None:
+            result.append(line)
+            index += 1
+            continue
+        # Массив либо целиком в одной строке ("name = []"), либо закрыт отдельной "]".
+        index += 1
+        if not line.rstrip().endswith("[]"):
+            while index < len(lines) and lines[index].rstrip() != "]":
+                index += 1
+            index += 1  # сама "]"
+        result.append(_array(name, getattr(lists, name)) + "\n")
+        replaced.add(name)
+
+    missing = [name for name in LIST_NAMES if name not in replaced]
+    if missing:
+        raise ManifestError([f"{task_toml}: нет массивов {', '.join(missing)}"])
+
+    task_toml.write_bytes("".join(result).encode("utf-8"))
+
+
+def _array_name(line: str) -> str | None:
+    for name in LIST_NAMES:
+        if line.startswith(f"{name} = ["):
+            return name
+    return None
 
 
 def _check(lists: TestLists) -> None:

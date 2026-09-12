@@ -10,7 +10,17 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from harness.contracts import CaseInput, CaseResult, Status, UsageLog, CaseDraft
+from harness.contracts import (
+    CaseDraft,
+    CaseInput,
+    CaseResult,
+    Problem,
+    ProblemCategory,
+    RepairTarget,
+    Status,
+    UsageLog,
+    Verdict,
+)
 from harness.repo.snapshot import compute_snapshot_sha256
 from harness.repo.workspace import copy_clean
 from harness.repo.context import build_context
@@ -19,15 +29,37 @@ from harness.llm.spec_writer import write_spec, write_instruction
 from harness.llm.test_writer import write_tests
 from harness.llm.solution_writer import write_solution
 from harness.llm.mutant_writer import write_mutants
+from harness.llm.parsing import ParsingError
 from harness.llm.repair import repair
-from harness.build.task_folder import write_task_folder
+from harness.build.manifest import ManifestError
+from harness.build.task_folder import TaskFolderError, write_task_folder
 from harness.verify.api import verify_case, VerifyOptions
-from harness.verify.mutation import oracle_diff
 from harness.evidence.usage import write_usage
 from harness.protocol.output import write_result
 
 MAX_REPAIR_ITERATIONS = 3
 LOGGER = logging.getLogger(__name__)
+
+# Черновик не удалось превратить в папку кейса: битые списки тестов, битый манифест,
+# неразобранный ответ модели. Внутри цикла это неудачная итерация, а не конец прогона.
+DRAFT_ERRORS = (TaskFolderError, ManifestError, ParsingError)
+
+
+def _draft_failed_verdict(error: Exception) -> Verdict:
+    """Вердикт за итерацию, которая не дошла до прогонов: чинить надо тесты."""
+    problems = getattr(error, "problems", None) or [str(error)]
+    return Verdict(
+        ok=False,
+        problems=[
+            Problem(
+                category=ProblemCategory.LIST_MISMATCH,
+                target=RepairTarget.TESTS,
+                details=f"Черновик кейса не собрался: {detail}",
+            )
+            for detail in problems
+        ],
+        runs=[],
+    )
 
 
 def _collect_log_excerpts(runs, evidence_dir: Path) -> dict[str, str]:
@@ -91,7 +123,7 @@ def run(case: CaseInput) -> CaseResult:
         instruction_md = write_instruction(client, spec, case.language)
 
         # 5. Tests
-        test_files, test_lists = write_tests(client, context, spec)
+        test_files, test_lists, protected_files = write_tests(client, context, spec)
 
         # 6. Solution
         solution_files = write_solution(client, context, spec)
@@ -101,20 +133,23 @@ def run(case: CaseInput) -> CaseResult:
             instruction_md=instruction_md,
             test_files=test_files,
             lists=test_lists,
-            solution_files=solution_files
+            solution_files=solution_files,
+            protected_files=protected_files,
         )
 
         # 6.5. LLM-мутанты — генерируем один раз до цикла
         llm_mutants = []
         try:
-            # Для oracle_diff нужны base и oracle репо. Собираем task/ один раз,
-            # чтобы получить diff, затем генерируем мутанты.
-            if task_dir.exists():
-                shutil.rmtree(task_dir)
-            write_task_folder(task_dir, case, draft, context.run_profile, workspace_repo)
-            diff = oracle_diff(task_dir / "environment" / "repo", task_dir / "solution")
-            if diff:
-                llm_mutants = write_mutants(client, context, draft, diff)
+            # Дифф эталонного решения существует только после применения solve.sh, а применяется
+            # он в контейнере (verify.runs.run_apply_solution) — образа здесь ещё нет. Поэтому
+            # модели показывается сам скрипт решения: anchor/replacement описывают изменение
+            # не хуже диффа, и ничего исполнять на хосте для этого не нужно.
+            solution_text = "\n\n".join(
+                f"### {path}\n{content}"
+                for path, content in sorted(draft.solution_files.items())
+            )
+            if solution_text.strip():
+                llm_mutants = write_mutants(client, context, draft, solution_text)
                 LOGGER.info("Generated %d LLM mutants", len(llm_mutants))
         except Exception:
             LOGGER.warning("LLM mutant generation failed, continuing with hunk-revert only",
@@ -136,24 +171,41 @@ def run(case: CaseInput) -> CaseResult:
                 shutil.rmtree(task_dir)
             if evidence_dir.exists():
                 shutil.rmtree(evidence_dir)
-            write_task_folder(task_dir, case, draft, context.run_profile, workspace_repo)
 
-            # 8 & 9. verify_case (includes static checks, Docker runs, mutants)
-            runs, verdict = verify_case(task_dir, evidence_dir, case.limits, verify_options)
+            # 8 & 9. verify_case (includes static checks, Docker runs, mutants).
+            # Несобираемый черновик — это провал итерации, а не конец прогона: следующая
+            # итерация ремонта получит проблему с target=tests и шанс её исправить.
+            try:
+                write_task_folder(task_dir, case, draft, context.run_profile, workspace_repo)
+                runs, verdict = verify_case(task_dir, evidence_dir, case.limits, verify_options)
+            except DRAFT_ERRORS as error:
+                LOGGER.warning("Итерация %d: черновик не собрался: %s", iteration, error)
+                runs = []
+                verdict = _draft_failed_verdict(error)
+
             final_verdict = verdict
 
             if verdict.ok:
                 break
 
             if iteration < MAX_REPAIR_ITERATIONS and verdict.problems:
-                # 10. Repair — собираем логи и чиним
+                # 10. Repair — собираем логи и чиним. Ремонт, который сам не удался,
+                # оставляет прежний рабочий черновик.
                 log_excerpts = _collect_log_excerpts(runs, evidence_dir)
-                draft = repair(client, context, draft, verdict, log_excerpts)
+                try:
+                    draft = repair(client, context, draft, verdict, log_excerpts)
+                except DRAFT_ERRORS as error:
+                    LOGGER.warning("Итерация %d: ремонт не удался: %s", iteration, error)
             else:
                 break
 
         # 11. Evidence — usage
         write_usage(evidence_dir, usage)
+
+        if final_verdict and final_verdict.notes:
+            # Верификация что-то поправила сама (например, переложила тест между списками):
+            # это ограничение кейса, о котором надо сказать, но не провал.
+            limitations.extend(final_verdict.notes)
 
         if final_verdict and final_verdict.ok:
             status = Status.READY

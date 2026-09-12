@@ -1,19 +1,25 @@
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from harness.contracts import Limits, Mutant, Problem, RunKind, RunResult, RunScope, TestLists, Verdict
+from harness.build.manifest import rewrite_test_lists
 from harness.evidence.summary import write_summary
 from harness.verify.docker import DockerRunner
 from harness.verify.mutation import hunk_revert_mutants, oracle_diff
-from harness.verify.runs import run_base_and_oracle, run_collect, run_mutants
-from harness.verify.verdict import decide
+from harness.verify.runs import (
+    run_apply_solution,
+    run_collect,
+    run_full_pair,
+    run_list_scopes,
+    run_mutants,
+    run_repeats,
+)
+from harness.verify.static_checks import check_task_folder
+from harness.verify.verdict import decide, reclassify_by_outcomes
 
 
 @dataclass(frozen=True)
@@ -42,31 +48,34 @@ def _load_test_lists(task_dir: Path) -> TestLists:
         )
 
 
-def _compute_hunk_mutants(task_dir: Path) -> list[Mutant]:
-    """Вычисляет hunk-revert мутанты между исходным repo и repo после solve.sh."""
-    base_repo = task_dir / "environment" / "repo"
-    solve_script = task_dir / "solution" / "solve.sh"
-    if not (base_repo.exists() and solve_script.exists()):
-        return []
+def _compute_hunk_mutants(
+    task_dir: Path, evidence_dir: Path, image: str, limits: Limits,
+    *, image_digest: str | None, runner: DockerRunner,
+) -> tuple[list[Mutant], RunResult]:
+    """Hunk-revert мутанты из диффа эталонного решения.
 
-    with tempfile.TemporaryDirectory() as tmp:
+    Решение применяется в контейнере (run_apply_solution), результат выкладывается во временную
+    папку на хосте, и дифф считается обычным oracle_diff. Если прогон не удался, мутантов нет,
+    и вместе с пустым списком возвращается его RunResult с причиной — вердикт обязан её увидеть.
+
+    ignore_cleanup_errors: файлы из контейнера принадлежат root, и на Linux уборка временной
+    папки может не пройти. Это не повод ронять верификацию.
+    """
+    base_repo = task_dir / "environment" / "repo"
+    with tempfile.TemporaryDirectory(prefix="harness-oracle-", ignore_cleanup_errors=True) as tmp:
         oracle_repo = Path(tmp) / "repo"
-        shutil.copytree(base_repo, oracle_repo)
-        try:
-            res = subprocess.run(
-                ["sh", str(solve_script.resolve())],
-                cwd=oracle_repo,
-                env={**os.environ, "REPO_PATH": str(oracle_repo)},
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=30,
-            )
-            if res.returncode == 0:
-                diff = oracle_diff(base_repo, oracle_repo)
-                return hunk_revert_mutants(diff)
-        except Exception:
-            pass
-    return []
+        apply_run = run_apply_solution(
+            task_dir=task_dir,
+            evidence_dir=evidence_dir,
+            image=image,
+            limits=limits,
+            oracle_repo=oracle_repo,
+            image_digest=image_digest,
+            runner=runner,
+        )
+        if not apply_run.executed:
+            return [], apply_run
+        return hunk_revert_mutants(oracle_diff(base_repo, oracle_repo)), apply_run
 
 
 def verify_case(
@@ -122,22 +131,40 @@ def verify_case(
         runner=runner,
     )
 
-    # 3. base и oracle прогоны
-    base_oracle_runs = run_base_and_oracle(
-        task_dir=task_dir,
-        evidence_dir=evidence_dir,
-        image=image_tag,
-        lists=lists,
-        limits=limits,
-        repeat=options.repeat,
-        image_digest=build_outcome.image_digest,
-        runner=runner,
-    )
+    # 3. Полные прогоны base и oracle
+    phase_kwargs = {
+        "task_dir": task_dir,
+        "evidence_dir": evidence_dir,
+        "image": image_tag,
+        "limits": limits,
+        "image_digest": build_outcome.image_digest,
+        "runner": runner,
+    }
+    full_runs = run_full_pair(lists=lists, **phase_kwargs)
+
+    # 3a. Раскладка по фактическим исходам — до прогонов по спискам, иначе они пойдут
+    # по неверной раскладке и дадут ложные REWARD_WRONG. Манифест догоняет изменение.
+    lists, notes = reclassify_by_outcomes(lists, full_runs)
+    if notes:
+        rewrite_test_lists(task_dir / "task.toml", lists)
+
+    # 3b. Прогоны по спискам и независимые повторы
+    base_oracle_runs = [
+        *full_runs,
+        *run_list_scopes(lists=lists, **phase_kwargs),
+    ]
+    if options.repeat:
+        base_oracle_runs += run_repeats(lists=lists, **phase_kwargs)
 
     # 4. Мутанты
     mutant_runs: list[RunResult] = []
+    apply_runs: list[RunResult] = []
     if options.run_mutants:
-        hunk_mutants = _compute_hunk_mutants(task_dir)
+        hunk_mutants, apply_run = _compute_hunk_mutants(
+            task_dir, evidence_dir, image_tag, limits,
+            image_digest=build_outcome.image_digest, runner=runner,
+        )
+        apply_runs = [apply_run]
         all_mutants = hunk_mutants + options.extra_mutants
         if all_mutants:
             mutant_runs = run_mutants(
@@ -151,16 +178,14 @@ def verify_case(
                 runner=runner,
             )
 
-    # 5. Статические проверки (владелец: №4)
-    static_problems: list[Problem] = []
-    try:
-        from harness.verify.static_checks import check_task_folder
-        static_problems = check_task_folder(task_dir, lists)
-    except (ImportError, NotImplementedError, AttributeError, TypeError):
-        pass
+    # 5. Статические проверки (владелец: №4).
+    # Без try: модуль собран и обязателен. Проглоченное исключение отключало разом все
+    # проверки — утечки в instruction.md, skip/xfail, мусор в task/, обращение solve.sh
+    # к /tests — и кейс получал ready.
+    static_problems: list[Problem] = check_task_folder(task_dir, lists)
 
-    all_runs = [build_run, collect_run, *base_oracle_runs, *mutant_runs]
-    verdict = decide(all_runs, lists, static_problems)
+    all_runs = [build_run, collect_run, *base_oracle_runs, *apply_runs, *mutant_runs]
+    verdict = decide(all_runs, lists, static_problems, notes=notes)
 
     # 6. Запись summary.json
     write_summary(evidence_dir, all_runs, verdict)

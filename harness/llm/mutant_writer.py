@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import PurePosixPath
 from pathlib import Path
 from typing import Any
 
@@ -47,37 +48,23 @@ def _format_context_for_mutants(context: RepoContext, draft: CaseDraft, oracle_d
     return "\n".join(lines)
 
 
-def _normalize_patch(patch: str) -> str | None:
-    """Проверяет и нормализует заголовок unified diff patch."""
-    lines = patch.strip().splitlines()
-    if not lines:
-        return None
+def _replacement_problem(file_path: str, anchor: str, replacement: str) -> str | None:
+    """Почему замену нельзя применить. None — мутант годится.
 
-    # Проверяем наличие hunk
-    if not any(line.startswith("@@") for line in lines):
-        return None
-
-    # Проверяем наличие удаляемых/добавляемых строк
-    has_changes = any(
-        (line.startswith("+") and not line.startswith("+++"))
-        or (line.startswith("-") and not line.startswith("---"))
-        for line in lines
-    )
-    if not has_changes:
-        return None
-
-    normalized_lines: list[str] = []
-    for line in lines:
-        if line.startswith("--- ") and not line.startswith("--- a/"):
-            path = line[4:].strip().lstrip("/")
-            normalized_lines.append(f"--- a/{path}")
-        elif line.startswith("+++ ") and not line.startswith("+++ b/"):
-            path = line[4:].strip().lstrip("/")
-            normalized_lines.append(f"+++ b/{path}")
-        else:
-            normalized_lines.append(line)
-
-    return "\n".join(normalized_lines) + "\n"
+    Путь приходит от модели и уезжает в контейнер, поэтому проверяется как любой другой путь
+    из черновика: '..' или ведущий слеш увели бы замену за пределы /app/repo.
+    """
+    if not file_path:
+        return "нет file_path"
+    if file_path.startswith("/") or "\\" in file_path:
+        return f"путь должен быть относительным POSIX-путём: {file_path!r}"
+    if ".." in PurePosixPath(file_path).parts:
+        return f"путь выходит за пределы /app/repo: {file_path!r}"
+    if not anchor.strip():
+        return "пустой anchor"
+    if anchor == replacement:
+        return "replacement совпадает с anchor, мутации нет"
+    return None
 
 
 def _sanitize_name(name: str, index: int) -> str:
@@ -104,7 +91,8 @@ def write_mutants(
         logger.warning("Initial mutants JSON parsing failed (%s), requesting repair...", err)
         repair_user = (
             f"Не удалось разобрать ответ как JSON с мутантами: {err}\n"
-            f"Верни СТРОГО валидный JSON-массив объектов с ключами 'name', 'description', 'patch'."
+            f"Верни СТРОГО валидный JSON-массив объектов с ключами "
+            f"'name', 'description', 'file_path', 'anchor', 'replacement'."
         )
         retry_resp = client.complete(
             system=system_prompt, user=repair_user, purpose="mutants:repair"
@@ -127,12 +115,14 @@ def write_mutants(
     for idx, item in enumerate(raw_list, start=1):
         raw_name = str(item.get("name", f"mutant-{idx}"))
         name = _sanitize_name(raw_name, idx)
-        description = str(item.get("description", "LLM-generated mutant patch")).strip()
-        raw_patch = str(item.get("patch", "")).strip()
+        description = str(item.get("description", "LLM-generated mutant")).strip()
+        file_path = str(item.get("file_path", "")).strip().replace("\\", "/").lstrip("./")
+        anchor = str(item.get("anchor", ""))
+        replacement = str(item.get("replacement", ""))
 
-        norm_patch = _normalize_patch(raw_patch)
-        if norm_patch is None:
-            logger.debug("Skipping mutant %s: invalid or empty unified diff", name)
+        problem = _replacement_problem(file_path, anchor, replacement)
+        if problem is not None:
+            logger.warning("Мутант %s отброшен: %s", name, problem)
             continue
 
         mutants.append(
@@ -140,7 +130,10 @@ def write_mutants(
                 name=name,
                 source=MutantSource.LLM,
                 description=description,
-                patch=norm_patch,
+                patch="",
+                file_path=file_path,
+                anchor=anchor,
+                replacement=replacement,
             )
         )
 

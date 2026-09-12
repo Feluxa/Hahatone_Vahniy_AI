@@ -1,4 +1,3 @@
-import argparse
 import sys
 from unittest.mock import patch, MagicMock
 from harness.cli import main

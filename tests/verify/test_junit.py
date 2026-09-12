@@ -85,3 +85,63 @@ def test_with_missing() -> None:
         assert augmented["tests/test_one.py::test_beta"].outcome == TestOutcome.MISSING
     finally:
         f_path.unlink(missing_ok=True)
+
+
+def _parse(xml_body: str, tmp_path: Path) -> dict:
+    xml_path = tmp_path / "tests.xml"
+    xml_path.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>\n<testsuites><testsuite name="pytest">'
+        + xml_body
+        + "</testsuite></testsuites>",
+        encoding="utf-8",
+    )
+    return parse_junit(xml_path)
+
+
+def test_failure_without_type_attribute_is_classified_by_message(tmp_path: Path) -> None:
+    """pytest не пишет атрибут type у <failure>: тип берётся из первой строки сообщения.
+
+    Раньше сюда безусловно подставлялся AssertionError, и fail_to_pass, упавший на
+    TypeError, засчитывался как воспроизведённый дефект (PROTOCOL §5.4).
+    """
+    reports = _parse(
+        '<testcase classname="tests.test_x" name="test_assert" file="tests/test_x.py">'
+        '<failure message="assert 1 == 2">body</failure></testcase>'
+        '<testcase classname="tests.test_x" name="test_type_error" file="tests/test_x.py">'
+        '<failure message="TypeError: unsupported operand type(s) for +: &apos;NoneType&apos; and &apos;int&apos;">'
+        "body</failure></testcase>",
+        tmp_path,
+    )
+
+    plain = reports["tests/test_x.py::test_assert"]
+    assert plain.outcome == TestOutcome.FAILED
+    assert plain.exception_type == "AssertionError"
+    assert plain.failed_by_assertion is True
+
+    typed = reports["tests/test_x.py::test_type_error"]
+    assert typed.outcome == TestOutcome.FAILED
+    assert typed.exception_type == "TypeError"
+    assert typed.failed_by_assertion is False
+
+
+def test_failure_message_with_colon_is_not_mistaken_for_exception(tmp_path: Path) -> None:
+    """Обычный assert с двоеточием в сообщении остаётся assert-падением."""
+    reports = _parse(
+        '<testcase classname="tests.test_x" name="test_dict" file="tests/test_x.py">'
+        "<failure message=\"assert {'net': 130} == {'net': 70}\">body</failure></testcase>",
+        tmp_path,
+    )
+
+    report = reports["tests/test_x.py::test_dict"]
+    assert report.exception_type == "AssertionError"
+    assert report.failed_by_assertion is True
+
+
+def test_explicit_type_attribute_wins(tmp_path: Path) -> None:
+    reports = _parse(
+        '<testcase classname="tests.test_x" name="test_x" file="tests/test_x.py">'
+        '<failure message="assert 1 == 2" type="ValueError">body</failure></testcase>',
+        tmp_path,
+    )
+
+    assert reports["tests/test_x.py::test_x"].exception_type == "ValueError"

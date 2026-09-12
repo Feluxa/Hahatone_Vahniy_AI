@@ -29,6 +29,7 @@ from pathlib import Path, PurePosixPath
 from harness.build.environment import render_conftest, render_test_sh, write_environment
 from harness.build.manifest import TEST_ID_SEPARATOR, render_task_toml
 from harness.contracts import CaseDraft, CaseInput, RunProfile, TestLists
+from harness.pytest_ids import expected_file_path
 from harness.repo.workspace import copy_clean
 
 TESTS_DIR = "tests"
@@ -64,6 +65,7 @@ def write_task_folder(
     _relative(draft.solution_files, SOLUTION_DIR, problems)
     if SOLVE_SCRIPT not in draft.solution_files:
         problems.append(f"solution_files: нет обязательного {SOLVE_SCRIPT}")
+    _check_protected_files(draft.protected_files, workspace_repo, problems)
     if problems:
         raise TaskFolderError(problems)
 
@@ -82,12 +84,47 @@ def write_task_folder(
         _write(tests_dir / "conftest.py", render_conftest(profile))
         for relative_path, content in draft.test_files.items():
             _write(tests_dir / relative_path, content)
+        _copy_protected(draft.protected_files, workspace_repo, tests_dir)
 
         for relative_path, content in draft.solution_files.items():
             _write(task_dir / SOLUTION_DIR / relative_path, content)
     except BaseException:
         shutil.rmtree(task_dir, ignore_errors=True)  # ignore_errors, чтобы не заслонить причину
         raise
+
+
+def _check_protected_files(
+    protected_files: list[str], workspace_repo: Path, problems: list[str],
+) -> None:
+    """Пути защищаемых файлов приходят от LLM, поэтому проверяются до первой записи.
+
+    Несуществующий или уводящий за пределы репозитория путь — это проблема черновика:
+    пропустить его молча нельзя, иначе anti_cheat останется без эталона, а кейс всё равно
+    получит ready. TaskFolderError внутри цикла ремонта — неудачная итерация, и модель
+    получит шанс назвать другой файл.
+    """
+    for raw in protected_files:
+        problem = _path_problem(raw, frozenset())
+        if problem is not None:
+            problems.append(f"protected_files: {problem}: {raw!r}")
+            continue
+        source = workspace_repo / PurePosixPath(raw)
+        if not source.is_file():
+            reason = "это не обычный файл" if source.exists() else "файла нет в репозитории"
+            problems.append(f"protected_files: {reason}: {raw}")
+
+
+def _copy_protected(protected_files: list[str], workspace_repo: Path, tests_dir: Path) -> None:
+    """Кладёт побайтные эталоны защищаемых файлов в tests/expected/.
+
+    Именно copy2, а не _write: эталон сравнивается с файлом в /app/repo байт в байт, и любая
+    нормализация переводов строк сломала бы сравнение на первом же файле с CRLF.
+    """
+    for raw in protected_files:
+        source = workspace_repo / PurePosixPath(raw)
+        target = tests_dir / PurePosixPath(expected_file_path(raw))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
 
 
 def _write_environment(env_dir: Path, profile: RunProfile, workspace_repo: Path) -> None:

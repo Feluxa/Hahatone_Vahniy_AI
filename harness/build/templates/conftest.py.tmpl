@@ -20,16 +20,19 @@ NEEDS_POSTGRES = $needs_postgres
 POSTGRES_MAJOR = $postgres_major
 MIGRATION_CMD = $migration_cmd
 SEED_SQL_FILES = $seed_sql_files
-ENV_VARS = $env_vars
 
-for _k, _v in ENV_VARS.items():
-    os.environ.setdefault(_k, _v)
+# Имя переменной окружения -> где она встретилась в проекте (RunProfile.env_vars).
+# Это описания, а не настройки: значения переменных профиль принципиально не читает,
+# потому что там могут быть секреты. Подставлять их в os.environ нельзя — проект получил бы
+# вместо строки подключения фразу вида "читается в backend/migrations/env.py".
+# Реальные значения выставляет фикстура postgres_service ниже.
+ENV_VAR_SOURCES = $env_vars
 
 
-def _get_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
+# Порт фиксированный и стандартный: тест, который подключается без параметров
+# (psycopg.connect(), psql без -p), обязан попадать в эту же базу.
+POSTGRES_PORT = 5432
+POSTGRES_LISTEN = "127.0.0.1"
 
 
 def _run_as_postgres(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -46,7 +49,7 @@ def postgres_service():
         yield None
         return
 
-    port = _get_free_port()
+    port = POSTGRES_PORT
     pg_data = Path("/tmp/pgdata")
     pg_log = Path("/tmp/pg.log")
 
@@ -70,7 +73,10 @@ def postgres_service():
         _run_as_postgres([initdb_bin, "-D", str(pg_data), "--no-sync", "-A", "trust", "-U", "postgres"])
         _run_as_postgres([
             pg_ctl_bin, "-D", str(pg_data), "-l", str(pg_log),
-            "-o", f"-p {port} -k /tmp -c fsync=off -c synchronous_commit=off -c full_page_writes=off",
+            "-o", (
+                f"-p {port} -k /tmp -c listen_addresses={POSTGRES_LISTEN} "
+                "-c fsync=off -c synchronous_commit=off -c full_page_writes=off"
+            ),
             "start",
         ])
     else:
@@ -80,7 +86,10 @@ def postgres_service():
         subprocess.run([initdb_bin, "-D", str(pg_data), "--no-sync", "-A", "trust", "-U", "postgres"], check=True)
         subprocess.run([
             pg_ctl_bin, "-D", str(pg_data), "-l", str(pg_log),
-            "-o", f"-p {port} -k /tmp -c fsync=off -c synchronous_commit=off -c full_page_writes=off",
+            "-o", (
+                f"-p {port} -k /tmp -c listen_addresses={POSTGRES_LISTEN} "
+                "-c fsync=off -c synchronous_commit=off -c full_page_writes=off"
+            ),
             "start",
         ], check=True)
 
@@ -108,6 +117,13 @@ def postgres_service():
     dsn = f"host=127.0.0.1 port={port} dbname={db_name} user=postgres"
     os.environ["DATABASE_URL"] = db_url
     os.environ["MERIDIAN_DSN"] = dsn
+
+    # Стандартные переменные libpq: с ними psycopg.connect() и psql без аргументов
+    # попадают в эту же базу, а не в базу по имени текущего пользователя (root).
+    os.environ["PGHOST"] = POSTGRES_LISTEN
+    os.environ["PGPORT"] = str(port)
+    os.environ["PGDATABASE"] = db_name
+    os.environ["PGUSER"] = "postgres"
 
     # Выполняем миграции ПОСЛЕ решения
     if MIGRATION_CMD:

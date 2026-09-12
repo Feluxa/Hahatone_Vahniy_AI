@@ -16,8 +16,11 @@ from harness.contracts import (
     Trust,
 )
 from harness.llm.client import LlmClient, LlmResponse
+from harness.pytest_ids import canonical_test_id
 from harness.llm.test_writer import (
     _align_and_validate_tests,
+    _protected_files,
+    lists_inconsistent_with_files,
     _extract_test_functions_from_ast,
     _normalize_test_id,
     write_tests,
@@ -157,7 +160,7 @@ def test_schema_unchanged():
         duration_sec=2.0,
     )
 
-    files, lists = write_tests(mock_client, sample_context, sample_spec)
+    files, lists, _protected = write_tests(mock_client, sample_context, sample_spec)
 
     assert "test_settlement_close.py" in files
     assert sample_code.strip() in files["test_settlement_close.py"]
@@ -192,10 +195,217 @@ def test_write_tests_repair_on_syntax_error(sample_context: RepoContext, sample_
         LlmResponse(text=json.dumps(good_json), model="GigaChat-3-Ultra", input_tokens=600, output_tokens=100, duration_sec=1.0),
     ]
 
-    files, lists = write_tests(mock_client, sample_context, sample_spec)
+    files, lists, _protected = write_tests(mock_client, sample_context, sample_spec)
 
     assert files["test_cases.py"] == fixed_code
     assert lists.fail_to_pass == ["tests/test_cases.py::test_fixed"]
     assert mock_client.complete.call_count == 2
     assert mock_client.complete.call_args_list[1].kwargs["purpose"] == "tests:repair"
 
+
+
+def test_align_remaps_ids_from_stale_filename() -> None:
+    """Списки из прошлой итерации ссылаются на старый файл — ID переезжают на актуальный."""
+    code = "def test_bug():\n    assert False\n\ndef test_guard():\n    assert True\n"
+    files = {"test_repaired.py": code}
+
+    files, lists = _align_and_validate_tests(
+        files,
+        ["tests/test_settlement_close.py::test_bug"],
+        [],
+        ["tests/test_settlement_close.py::test_guard"],
+    )
+
+    assert lists.fail_to_pass == ["tests/test_repaired.py::test_bug"]
+    assert lists.anti_cheat == ["tests/test_repaired.py::test_guard"]
+    assert lists_inconsistent_with_files(files, lists) == []
+
+
+def test_align_drops_ids_without_matching_function() -> None:
+    """Тест, которого нет ни в одном файле черновика, отбрасывается, а не доезжает до диска."""
+    files = {"test_repaired.py": "def test_bug():\n    assert False\n"}
+
+    files, lists = _align_and_validate_tests(
+        files,
+        ["tests/test_repaired.py::test_bug"],
+        ["tests/test_old.py::test_vanished"],
+        [],
+    )
+
+    assert "test_vanished" not in " ".join(lists.all_ids())
+    assert lists_inconsistent_with_files(files, lists) == []
+
+
+def test_lists_inconsistent_with_files_reports_missing_file() -> None:
+    lists = TestLists(
+        fail_to_pass=["tests/test_gone.py::test_bug"],
+        pass_to_pass=[],
+        anti_cheat=[],
+    )
+
+    problems = lists_inconsistent_with_files({"test_here.py": ""}, lists)
+
+    assert any("test_gone.py" in p for p in problems)
+
+
+def test_lists_inconsistent_with_files_reports_empty_fail_to_pass() -> None:
+    lists = TestLists(fail_to_pass=[], pass_to_pass=["tests/test_here.py::test_ok"], anti_cheat=[])
+
+    problems = lists_inconsistent_with_files({"test_here.py": "def test_ok(): ..."}, lists)
+
+    assert any("fail_to_pass" in p for p in problems)
+
+
+def test_lists_consistent_when_everything_matches() -> None:
+    lists = TestLists(
+        fail_to_pass=["tests/test_here.py::test_bug"],
+        pass_to_pass=[],
+        anti_cheat=[],
+    )
+
+    assert lists_inconsistent_with_files({"test_here.py": "def test_bug(): ..."}, lists) == []
+
+
+@pytest.mark.parametrize("file_key", ["test_close.py", "tests/test_close.py"])
+@pytest.mark.parametrize("raw_id", ["test_close.py::test_bug", "tests/test_close.py::test_bug"])
+def test_align_matches_file_regardless_of_tests_prefix(file_key: str, raw_id: str) -> None:
+    """ID с префиксом tests/ и без него находят один и тот же файл черновика."""
+    files, lists = _align_and_validate_tests(
+        {file_key: "def test_bug():\n    assert False\n"}, [raw_id], [], [],
+    )
+
+    assert set(files) == {"test_close.py"}
+    assert lists.fail_to_pass == ["tests/test_close.py::test_bug"]
+    assert lists_inconsistent_with_files(files, lists) == []
+
+
+def test_align_always_returns_canonical_ids() -> None:
+    """На выходе — только tests/<путь>::<тест>, включая подпапки и нераспределённые функции."""
+    code = "def test_bug():\n    assert False\n\ndef test_extra():\n    assert True\n"
+    files, lists = _align_and_validate_tests({"tests/sql/test_close.py": code}, ["test_bug"], [], [])
+
+    assert set(files) == {"sql/test_close.py"}
+    for test_id in lists.all_ids():
+        assert test_id == canonical_test_id(test_id)
+        assert test_id.startswith("tests/sql/test_close.py::")
+    assert "tests/sql/test_close.py::test_extra" in lists.all_ids()
+
+
+def test_align_refuses_to_guess_between_same_named_files() -> None:
+    """Два файла с одинаковым именем в разных папках — несогласованность, а не выбор первого."""
+    code = "def test_bug():\n    assert False\n"
+    files = {"sql/test_close.py": code, "api/test_close.py": code}
+
+    files, lists = _align_and_validate_tests(files, ["test_close.py::test_bug"], [], [])
+
+    # Молчаливой привязки к первому файлу не произошло.
+    assert "tests/sql/test_close.py::test_bug" not in lists.fail_to_pass
+    assert "tests/api/test_close.py::test_bug" not in lists.fail_to_pass
+
+    problems = lists_inconsistent_with_files(files, lists)
+    assert any("несколько файлов с именем test_close.py" in p for p in problems)
+
+
+def test_lists_inconsistent_reports_non_canonical_ids() -> None:
+    lists = TestLists(fail_to_pass=["test_close.py::test_bug"], pass_to_pass=[], anti_cheat=[])
+
+    problems = lists_inconsistent_with_files({"test_close.py": "def test_bug(): ..."}, lists)
+
+    assert any("каноническом виде" in p for p in problems)
+
+
+def test_align_does_not_bind_ids_to_expected_files() -> None:
+    """Идентификатор не может указывать на .expected: pytest такой файл не собирает."""
+    files = {
+        "test_close.py": "def test_sentinel_untouched():\n    assert True\n",
+        "release_sentinel.txt.expected": "MERIDIAN_RELEASE_INTEGRITY_SENTINEL_OK\n",
+    }
+
+    files, lists = _align_and_validate_tests(files, ["test_sentinel_untouched"], [], [])
+
+    assert set(files) == {"test_close.py", "release_sentinel.txt.expected"}
+    assert lists.all_ids() == ["tests/test_close.py::test_sentinel_untouched"]
+    assert lists_inconsistent_with_files(files, lists) == []
+
+
+def _tests_prompt() -> str:
+    return (Path(__file__).resolve().parents[2] / "harness" / "llm" / "prompts" / "tests.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_prompt_forbids_async_test_functions() -> None:
+    prompt = _tests_prompt()
+
+    assert "async def test_" in prompt
+    assert "ЗАПРЕЩЁН" in prompt
+    assert "asyncio.run" in prompt
+    assert "tests/settlement/test_preview.py" in prompt
+
+
+def test_prompt_forbids_generated_hashes_and_untrusted_sources() -> None:
+    prompt = _tests_prompt()
+
+    assert ".expected" in prompt
+    assert "md5" in prompt
+    assert "untrusted_paths" in prompt
+    assert "protected_files" in prompt
+    assert "tests/expected/" in prompt
+    assert "read_bytes()" in prompt
+
+
+def test_protected_files_collects_paths_only() -> None:
+    """Модель называет путь; содержимое эталона копирует харнесс."""
+    assert _protected_files({
+        "protected_files": ["DOCS/release_sentinel.txt", " sql/090_core_seed.sql ", ""]
+    }) == ["DOCS/release_sentinel.txt", "sql/090_core_seed.sql"]
+
+
+def test_protected_files_deduplicates_and_tolerates_absence() -> None:
+    assert _protected_files({"protected_files": ["a.txt", "a.txt"]}) == ["a.txt"]
+    assert _protected_files({}) == []
+    assert _protected_files({"protected_files": "DOCS/x.txt"}) == []
+
+
+def test_protected_files_keeps_bad_paths_for_validation() -> None:
+    """Плохой путь не выбрасывается молча: его отвергнет write_task_folder и уйдёт в ремонт."""
+    assert _protected_files({"protected_files": ["../etc/passwd", "нет-такого.txt"]}) == [
+        "../etc/passwd", "нет-такого.txt",
+    ]
+
+
+def test_prompt_names_the_dsn_environment_variable() -> None:
+    prompt = _tests_prompt()
+
+    assert "MERIDIAN_DSN" in prompt
+    assert "127.0.0.1:5432" in prompt
+    assert "psycopg.connect()` без аргументов" in prompt
+
+
+def test_prompt_forbids_computing_expected_path() -> None:
+    """Модель применила with_suffix() и получила ValueError — теперь это прямо запрещено."""
+    prompt = _tests_prompt()
+
+    assert "with_suffix" in prompt
+    assert "ЗАПРЕЩЁН" in prompt
+    assert 'Path(__file__).parent / "expected"' in prompt
+
+
+def test_prompt_restricts_anti_cheat_to_three_templates() -> None:
+    """Модель трижды подряд писала фиктивные проверки — теперь выбор ограничен образцами."""
+    prompt = _tests_prompt()
+
+    assert "ТОЛЬКО из трёх образцов" in prompt
+    assert "inspect.signature" in prompt
+    assert "information_schema.columns" in prompt
+    assert "table_schema = 'bank_settlement'" in prompt
+    # Пустая выборка из information_schema — не доказательство сохранности схемы.
+    assert "выборка пуста" in prompt
+
+
+def test_prompt_forbids_fake_introspection_checks() -> None:
+    prompt = _tests_prompt()
+
+    for forbidden in ("__origin__", "__args__", "FieldInfo", "model_fields", "hasattr"):
+        assert forbidden in prompt, forbidden
+    assert "ЗАПРЕЩЕНО проверять типы через" in prompt

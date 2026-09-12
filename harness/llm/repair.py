@@ -28,6 +28,8 @@ from harness.llm.spec_writer import (
 )
 from harness.llm.test_writer import (
     _align_and_validate_tests,
+    _protected_files,
+    lists_inconsistent_with_files,
     write_tests,
 )
 
@@ -144,8 +146,8 @@ def _repair_tests(
     problems: list[Problem],
     log_excerpts: dict[str, str],
     system_prompt: str,
-) -> tuple[dict[str, str], Any]:
-    """Точечно исправляет тестовые файлы и списки."""
+) -> tuple[dict[str, str], Any, list[str]]:
+    """Точечно исправляет тестовые файлы, списки и набор защищаемых файлов."""
     primary_filename = next(iter(draft.test_files.keys()), "test_settlement_close.py")
     test_code = draft.test_files.get(primary_filename, "")
 
@@ -164,13 +166,14 @@ def _repair_tests(
         f"{draft.spec.defect_hypothesis}\n\n"
         f"Исправь тесты и списки в соответствии с правилами PROTOCOL.md. "
         f"Верни СТРОГО валидный JSON с ключами: "
-        f"test_file_name, test_file_content, fail_to_pass, pass_to_pass, anti_cheat."
+        f"test_file_name, test_file_content, fail_to_pass, pass_to_pass, anti_cheat, "
+        f"protected_files (пути защищаемых файлов репозитория, эталоны кладёт харнесс)."
     )
     resp = client.complete(system=system_prompt, user=user_prompt, purpose="repair:tests")
     try:
         data = extract_json(resp.text)
     except ParsingError:
-        return draft.test_files, draft.lists
+        return draft.test_files, draft.lists, draft.protected_files
 
     filename = str(data.get("test_file_name", primary_filename)).strip()
     content = str(data.get("test_file_content", test_code)).strip()
@@ -178,7 +181,23 @@ def _repair_tests(
     p2p_raw: list[str] = [str(x) for x in data.get("pass_to_pass", draft.lists.pass_to_pass)]
     ac_raw: list[str] = [str(x) for x in data.get("anti_cheat", draft.lists.anti_cheat)]
 
-    return _align_and_validate_tests({filename: content}, f2p_raw, p2p_raw, ac_raw)
+    new_files, new_lists = _align_and_validate_tests({filename: content}, f2p_raw, p2p_raw, ac_raw)
+    # Набор защищаемых файлов переносим из прежнего черновика, если модель его не вернула:
+    # ремонт тестов не повод потерять anti_cheat-эталоны.
+    new_protected = _protected_files(data) or list(draft.protected_files)
+
+    # Списки уже приведены к возвращённому файлу, но после отбрасывания «висячих» ID
+    # fail_to_pass мог опустеть. Такой черновик собрать нельзя: это провал итерации ремонта,
+    # а не повод ронять прогон — возвращаем прежний рабочий набор.
+    problems = lists_inconsistent_with_files(new_files, new_lists)
+    if problems:
+        logger.warning(
+            "Ремонт тестов дал несогласованный черновик (%s), оставляем прежние тесты",
+            "; ".join(problems),
+        )
+        return draft.test_files, draft.lists, draft.protected_files
+
+    return new_files, new_lists, new_protected
 
 
 def repair(
@@ -203,6 +222,7 @@ def repair(
     new_solution_files = dict(draft.solution_files)
     new_test_files = dict(draft.test_files)
     new_lists = draft.lists
+    new_protected = list(draft.protected_files)
 
     # 1. Ремонт инструкции (если есть проблемы с target=INSTRUCTION)
     if RepairTarget.INSTRUCTION in problems_by_target:
@@ -229,7 +249,7 @@ def repair(
     # 3. Ремонт тестов (если есть проблемы с target=TESTS)
     if RepairTarget.TESTS in problems_by_target:
         logger.info("Repairing tests and lists...")
-        new_test_files, new_lists = _repair_tests(
+        new_test_files, new_lists, new_protected = _repair_tests(
             client=client,
             context=context,
             draft=draft,
@@ -244,6 +264,7 @@ def repair(
         test_files=new_test_files,
         lists=new_lists,
         solution_files=new_solution_files,
+        protected_files=new_protected,
     )
 
 
@@ -258,7 +279,15 @@ def create_case_draft(
     instruction_md = write_instruction(client, spec, language)
 
     logger.info("Step 3/4: Writing tests and test lists...")
-    test_files, lists = write_tests(client, context, spec)
+    test_files, lists, protected_files = write_tests(client, context, spec)
+
+    # Черновик со списками, которые ссылаются на несуществующий файл, до диска доходить не должен:
+    # там он превратится в TaskFolderError уже после половины работы.
+    problems = lists_inconsistent_with_files(test_files, lists)
+    if problems:
+        raise ParsingError(
+            "Списки тестов не согласованы с файлами черновика: " + "; ".join(problems)
+        )
 
     logger.info("Step 4/4: Writing solution/solve.sh...")
     solution_files = write_solution(client, context, spec)
@@ -269,4 +298,5 @@ def create_case_draft(
         test_files=test_files,
         lists=lists,
         solution_files=solution_files,
+        protected_files=protected_files,
     )

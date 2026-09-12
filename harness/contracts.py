@@ -181,6 +181,11 @@ class CaseDraft:
     test_files: dict[str, str]      # путь внутри task/tests/ -> содержимое (без шаблонных test.sh и conftest.py)
     lists: TestLists
     solution_files: dict[str, str]  # путь внутри task/solution/ -> содержимое, обязательно "solve.sh"
+    # Файлы репозитория, неизменность которых проверяет anti_cheat: относительные POSIX-пути
+    # внутри исходника. Эталон для побайтного сравнения кладёт сам харнесс
+    # (write_task_folder -> tests/expected/<путь>.expected), модель только называет путь:
+    # содержимое, переписанное моделью, побайтно уже не совпадёт.
+    protected_files: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +260,17 @@ class Mutant:
     source: MutantSource
     description: str
     patch: str                      # unified diff относительно состояния после solve.sh (корень = /app/repo)
+    # Мутант-замена: харнесс сам находит anchor в file_path и меняет на replacement, как это
+    # делает solve.sh. Якорь обязан встречаться ровно один раз, иначе мутант невалиден.
+    # Так их задаёт LLM: unified diff от модели стабильно не накладывался (patch не находил
+    # контекст). Для hunk_revert поля пустые, там применяется patch.
+    file_path: str = ""             # путь относительно /app/repo
+    anchor: str = ""                # заменяемый текст
+    replacement: str = ""           # чем заменяется
+
+    @property
+    def is_replacement(self) -> bool:
+        return bool(self.file_path and self.anchor)
 
 
 class ProblemCategory(str, Enum):
@@ -299,6 +315,10 @@ class Verdict:
     ok: bool
     problems: list[Problem] = field(default_factory=list)
     runs: list[str] = field(default_factory=list)   # имена прогонов, на которых основан вердикт
+    # То, что верификация изменила или заметила, но провалом не считает: например
+    # переклассификация теста между списками по фактическим исходам. Уезжает в
+    # CaseResult.limitations и на ok не влияет.
+    notes: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

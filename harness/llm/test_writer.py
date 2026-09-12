@@ -9,6 +9,7 @@ from pathlib import Path
 from harness.contracts import CaseSpec, RepoContext, TestLists, Trust
 from harness.llm.client import LlmClient
 from harness.llm.parsing import ParsingError, extract_json
+from harness.pytest_ids import SEPARATOR, canonical_test_id, make_test_id, relative_test_path, split_test_id
 
 logger = logging.getLogger(__name__)
 
@@ -91,19 +92,93 @@ def _extract_test_functions_from_ast(code: str) -> list[str]:
 
 
 def _normalize_test_id(raw_id: str, default_filename: str) -> str:
-    """Приводит сырой идентификатор к каноническому виду tests/<filename>::<test_name>."""
+    """Приводит сырой идентификатор к каноническому виду tests/<путь>::<test_name>.
+
+    Путь внутри tests/ сохраняется целиком: подпапки — часть идентификатора по PROTOCOL.md.
+    Идентификатор без "::" — это одно имя теста, файл берётся из default_filename.
+    """
     cleaned = raw_id.strip()
-    if "::" in cleaned:
-        path_part, func_part = cleaned.split("::", 1)
-        path_part = path_part.strip().replace("\\", "/")
-        filename = path_part.split("/")[-1]
-        return f"tests/{filename}::{func_part.strip()}"
+    if SEPARATOR in cleaned:
+        return canonical_test_id(cleaned)
 
     func_match = re.search(r"\b(test_[a-zA-Z0-9_]+)\b", cleaned)
     if func_match:
-        return f"tests/{default_filename}::{func_match.group(1)}"
+        return make_test_id(default_filename, func_match.group(1))
 
-    return f"tests/{default_filename}::{cleaned}"
+    return make_test_id(default_filename, cleaned)
+
+
+def _protected_files(data: dict) -> list[str]:
+    """Пути защищаемых файлов из ответа модели: только пути, без содержимого.
+
+    Эталон для побайтного сравнения копирует сам харнесс (write_task_folder), потому что
+    содержимое, переписанное моделью в JSON-строку, побайтно уже не совпадёт — в первом же
+    файле с CRLF. По той же причине модель может называть и файлы из untrusted_paths:
+    их содержимого она не видит, а харнессу оно и не нужно.
+
+    Пути здесь только собираются; проверяет их write_task_folder, у которого есть репозиторий.
+    Молча выбрасывать несуществующий путь нельзя — тогда anti_cheat останется без эталона.
+    """
+    raw = data.get("protected_files")
+    if not isinstance(raw, list):
+        return []
+    seen: list[str] = []
+    for item in raw:
+        path = str(item).strip()
+        if path and path not in seen:
+            seen.append(path)
+    return seen
+
+
+def _only(candidates: list[str]) -> str | None:
+    """Единственный кандидат или None. Неоднозначность — не повод молча взять первый."""
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _resolve_test_id(
+    raw_id: str, primary_filename: str, funcs_by_file: dict[str, list[str]],
+) -> str | None:
+    """Канонический ID, привязанный к файлу, который действительно есть в черновике.
+
+    Сопоставление идёт по относительному пути внутри tests/, поэтому
+    'test_close.py::test_x' и 'tests/test_close.py::test_x' находят один и тот же файл.
+    Модель охотно оставляет в списках имя файла из прошлой итерации, а возвращает тесты под
+    новым именем: такой ID доживал до write_task_folder и ронял весь прогон, поэтому здесь он
+    переотображается на файл, где функция объявлена.
+
+    None означает «привязать не к чему»: файла нет и функция либо нигде не объявлена, либо
+    объявлена сразу в нескольких файлах. Выбирать первый попавшийся нельзя — это
+    несогласованность черновика, и сообщает о ней lists_inconsistent_with_files.
+    """
+    normalized = _normalize_test_id(raw_id, primary_filename)
+    relative_path, func_name = split_test_id(normalized)
+
+    known_funcs = funcs_by_file.get(relative_path)
+    if known_funcs is not None and (not known_funcs or func_name in known_funcs):
+        # Файл есть в черновике и содержит функцию. Пустой список значит, что AST не разобрался,
+        # — тогда доверяем модели, как и до появления этой проверки.
+        return make_test_id(relative_path, func_name)
+
+    # Тот же файл, но лежащий в подпапке черновика.
+    basename = relative_path.rsplit("/", 1)[-1]
+    by_basename = _only([
+        candidate for candidate in funcs_by_file
+        if candidate.rsplit("/", 1)[-1] == basename
+        and (not funcs_by_file[candidate] or func_name in funcs_by_file[candidate])
+    ])
+    if by_basename is not None:
+        return make_test_id(by_basename, func_name)
+
+    by_function = _only([
+        candidate for candidate, funcs in funcs_by_file.items() if func_name in funcs
+    ])
+    if by_function is not None:
+        return make_test_id(by_function, func_name)
+
+    if not any(funcs_by_file.values()):
+        # Ни один файл не разобрался: привязываем к основному, чтобы не потерять списки целиком.
+        return make_test_id(primary_filename, func_name)
+    return None
 
 
 def _align_and_validate_tests(
@@ -112,22 +187,28 @@ def _align_and_validate_tests(
     p2p_raw: list[str],
     ac_raw: list[str],
 ) -> tuple[dict[str, str], TestLists]:
-    """Сверяет списки с AST-деревом файлов тестов, гарантируя отсутствие дублей и пропусков."""
-    # Определяем имя основного тестового файла
-    primary_filename = next(iter(test_files.keys()), "test_cases.py")
-    test_code = test_files.get(primary_filename, "")
+    """Сверяет списки с AST-деревом файлов тестов, гарантируя отсутствие дублей и пропусков.
 
-    ast_funcs = _extract_test_functions_from_ast(test_code)
-    ast_funcs_set = set(ast_funcs)
+    На выходе каждый ID ссылается на файл из test_files: списки и черновик согласованы,
+    и сборка папки кейса не упадёт на несуществующем файле.
+    """
+    # Ключи черновика — пути внутри task/tests/. Модель иногда добавляет к ним ведущий tests/,
+    # и тогда файл оказывался бы в task/tests/tests/: приводим к одному виду сразу.
+    test_files = {relative_test_path(name): code for name, code in test_files.items()}
+    # Данные рядом с тестами (эталоны .expected, фикстуры) тестами не являются: привязывать
+    # к ним идентификаторы нельзя, иначе ID уедет на файл, который pytest не собирает.
+    sources = {name: code for name, code in test_files.items() if name.endswith(".py")}
+    primary_filename = next(iter(sources), "test_cases.py")
+    funcs_by_file: dict[str, list[str]] = {
+        name: _extract_test_functions_from_ast(code) for name, code in sources.items()
+    }
 
     def process_list(raw_items: list[str]) -> list[str]:
         result: list[str] = []
         for item in raw_items:
-            norm = _normalize_test_id(item, primary_filename)
-            func_name = norm.split("::")[-1]
-            if not ast_funcs_set or func_name in ast_funcs_set:
-                if norm not in result:
-                    result.append(norm)
+            resolved = _resolve_test_id(item, primary_filename, funcs_by_file)
+            if resolved is not None and resolved not in result:
+                result.append(resolved)
         return result
 
     f2p = process_list(f2p_raw)
@@ -141,10 +222,12 @@ def _align_and_validate_tests(
     p2p = [x for x in p2p if x not in f2p_set and x not in ac_set]
 
     # Проверяем нераспределенные функции из AST
-    assigned_funcs = {x.split("::")[-1] for x in (*f2p, *p2p, *ac)}
-    for func in ast_funcs:
-        if func not in assigned_funcs:
-            canon_id = f"tests/{primary_filename}::{func}"
+    assigned_ids = {*f2p, *p2p, *ac}
+    for filename, funcs in funcs_by_file.items():
+        for func in funcs:
+            canon_id = make_test_id(filename, func)
+            if canon_id in assigned_ids:
+                continue
             lower = func.lower()
             if any(k in lower for k in ("cheat", "isolation", "schema", "sentinel", "signature", "untrusted")):
                 ac.append(canon_id)
@@ -156,10 +239,58 @@ def _align_and_validate_tests(
     return test_files, TestLists(fail_to_pass=f2p, pass_to_pass=p2p, anti_cheat=ac)
 
 
+def lists_inconsistent_with_files(test_files: dict[str, str], lists: TestLists) -> list[str]:
+    """Проблемы согласованности списков и файлов черновика. Пустой список — всё в порядке.
+
+    Ловится до записи на диск: иначе те же расхождения вылезут как TaskFolderError из
+    write_task_folder и оборвут прогон.
+    """
+    problems: list[str] = []
+    # Идентификатор может ссылаться только на .py: .expected и прочие данные pytest не собирает.
+    known = {relative_test_path(name) for name in test_files if name.endswith(".py")}
+
+    # Два файла с одинаковым именем в разных папках: привязать ID по имени файла к одному из них
+    # нельзя, и выбирать первый попавшийся тоже — это несогласованность самого черновика.
+    by_basename: dict[str, list[str]] = {}
+    for name in sorted(known):
+        by_basename.setdefault(name.rsplit("/", 1)[-1], []).append(name)
+    for basename, paths in sorted(by_basename.items()):
+        if len(paths) > 1:
+            problems.append(
+                f"в черновике несколько файлов с именем {basename}: {', '.join(paths)}; "
+                f"идентификатор теста нельзя привязать однозначно"
+            )
+
+    missing = sorted({
+        split_test_id(test_id)[0]
+        for test_id in lists.all_ids()
+        if split_test_id(test_id)[0] not in known
+    })
+    if missing:
+        problems.append(
+            f"списки ссылаются на файлы, которых нет в черновике: {', '.join(missing)}; "
+            f"есть только {', '.join(sorted(known)) or '(ничего)'}"
+        )
+
+    non_canonical = sorted(
+        test_id for test_id in lists.all_ids() if test_id != canonical_test_id(test_id)
+    )
+    if non_canonical:
+        problems.append(
+            f"идентификаторы не в каноническом виде tests/<файл>::<тест>: {', '.join(non_canonical)}"
+        )
+    if not lists.fail_to_pass:
+        problems.append("fail_to_pass пуст: кейс без воспроизводимого дефекта не собирается")
+    duplicates = lists.duplicates()
+    if duplicates:
+        problems.append(f"ID встречается больше одного раза: {', '.join(duplicates)}")
+    return problems
+
+
 def write_tests(
     client: LlmClient, context: RepoContext, spec: CaseSpec
-) -> tuple[dict[str, str], TestLists]:
-    """Генерирует файлы тестов и три списка (fail_to_pass, pass_to_pass, anti_cheat)."""
+) -> tuple[dict[str, str], TestLists, list[str]]:
+    """Файлы тестов, три списка и пути защищаемых файлов для anti_cheat."""
     system_prompt = _load_prompt("tests.md")
     user_prompt = _format_context_and_spec_for_tests(context, spec)
 
@@ -210,5 +341,5 @@ def write_tests(
     p2p_raw: list[str] = [str(x) for x in data.get("pass_to_pass", [])]
     ac_raw: list[str] = [str(x) for x in data.get("anti_cheat", [])]
 
-    test_files = {filename: content}
-    return _align_and_validate_tests(test_files, f2p_raw, p2p_raw, ac_raw)
+    test_files, lists = _align_and_validate_tests({filename: content}, f2p_raw, p2p_raw, ac_raw)
+    return test_files, lists, _protected_files(data)

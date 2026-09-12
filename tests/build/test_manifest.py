@@ -14,7 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from harness.build.manifest import ManifestError, read_test_lists, render_task_toml
+from harness.build.manifest import (
+    ManifestError,
+    read_test_lists,
+    render_task_toml,
+    rewrite_test_lists,
+)
 from harness.contracts import (
     TASK_SCHEMA_VERSION, Author, CaseInput, CaseSpec, Difficulty, Language, Limits, TestLists,
 )
@@ -254,3 +259,83 @@ def test_all_problems_are_collected_at_once() -> None:
     assert "fail_to_pass" in problems
     assert "no-separator" in problems
     assert "tests/t.py::a" in problems
+
+
+def test_read_test_lists_canonicalizes_ids(tmp_path: Path) -> None:
+    """Списки из task.toml приводятся к тому же виду, что и собранные тесты."""
+    text = render(lists=TestLists(
+        fail_to_pass=["test_close.py::test_bug"],
+        pass_to_pass=["/tests/test_close.py::test_guard"],
+        anti_cheat=["tests/sql/test_close.py::test_schema"],
+    ))
+
+    lists = read_test_lists(write(tmp_path, text))
+
+    assert lists.fail_to_pass == ["tests/test_close.py::test_bug"]
+    assert lists.pass_to_pass == ["tests/test_close.py::test_guard"]
+    assert lists.anti_cheat == ["tests/sql/test_close.py::test_schema"]
+
+
+def test_read_test_lists_detects_duplicates_across_prefix_forms(tmp_path: Path) -> None:
+    """Один тест, записанный двумя способами, — это дубль, а не два разных теста."""
+    text = render(lists=TestLists(
+        fail_to_pass=["test_close.py::test_bug"],
+        pass_to_pass=["tests/test_close.py::test_bug"],
+        anti_cheat=[],
+    ))
+
+    with pytest.raises(ManifestError) as excinfo:
+        read_test_lists(write(tmp_path, text))
+
+    assert any("больше одного раза" in p for p in excinfo.value.problems)
+
+
+def test_rewrite_test_lists_replaces_only_the_arrays(tmp_path: Path) -> None:
+    """Переклассификация догоняет манифест, не трогая всё остальное."""
+    path = write(tmp_path, render())
+    before = path.read_text(encoding="utf-8")
+    moved = TestLists(
+        fail_to_pass=[*EXAMPLE_LISTS.fail_to_pass, *EXAMPLE_LISTS.pass_to_pass],
+        pass_to_pass=[],
+        anti_cheat=EXAMPLE_LISTS.anti_cheat,
+    )
+
+    rewrite_test_lists(path, moved)
+
+    assert read_test_lists(path) == moved
+    after = path.read_text(encoding="utf-8")
+    # Всё, что не массивы тестов, осталось прежним.
+    for line in before.splitlines():
+        if line.startswith(("fail_to_pass", "pass_to_pass", "anti_cheat", "    \"tests/", "]")):
+            continue
+        assert line in after
+    assert "pass_to_pass = []" in after
+
+
+def test_rewrite_test_lists_round_trips_through_reader(tmp_path: Path) -> None:
+    path = write(tmp_path, render())
+    lists = TestLists(fail_to_pass=["tests/t.py::a", "tests/t.py::b"], pass_to_pass=[], anti_cheat=["tests/t.py::c"])
+
+    rewrite_test_lists(path, lists)
+
+    assert read_test_lists(path) == lists
+
+
+def test_rewrite_test_lists_rejects_empty_fail_to_pass(tmp_path: Path) -> None:
+    path = write(tmp_path, render())
+    before = path.read_bytes()
+
+    with pytest.raises(ManifestError):
+        rewrite_test_lists(path, TestLists(fail_to_pass=[], pass_to_pass=["tests/t.py::a"], anti_cheat=[]))
+
+    assert path.read_bytes() == before
+
+
+def test_rewrite_test_lists_reports_manifest_without_arrays(tmp_path: Path) -> None:
+    path = tmp_path / "task.toml"
+    path.write_text('schema_version = "1.1"\n\n[metadata]\nteam = "t"\n', encoding="utf-8")
+
+    with pytest.raises(ManifestError) as excinfo:
+        rewrite_test_lists(path, TestLists(fail_to_pass=["tests/t.py::a"], pass_to_pass=[], anti_cheat=[]))
+
+    assert any("нет массивов" in problem for problem in excinfo.value.problems)

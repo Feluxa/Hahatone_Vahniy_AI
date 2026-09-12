@@ -340,3 +340,113 @@ def test_golden_manifest_lists_survive(tmp_path: Path) -> None:
     task_dir = tmp_path / "task"
     write_task_folder(task_dir, case, golden_draft(), detect_run_profile(GOLDEN_REPO), GOLDEN_REPO)
     assert read_test_lists(task_dir / "task.toml") == read_test_lists(GOLDEN / "task.toml")
+
+
+def _draft_with_protected(protected: list[str]) -> CaseDraft:
+    return CaseDraft(
+        spec=CaseSpec(
+            goal="g", behavior=["b"], invariants=["i"], edge_cases=["e"],
+            defect_hypothesis="d", bank_domain="Домен", description="desc",
+        ),
+        instruction_md="# Задание\n",
+        test_files={"test_case.py": "def test_x():\n    assert True\n"},
+        lists=TestLists(fail_to_pass=["tests/test_case.py::test_x"], pass_to_pass=[], anti_cheat=[]),
+        solution_files={"solve.sh": "#!/bin/sh\nset -eu\n"},
+        protected_files=protected,
+    )
+
+
+def _repo_with_crlf(root: Path) -> Path:
+    repo = root / "repo"
+    (repo / "DOCS").mkdir(parents=True)
+    (repo / "sql").mkdir(parents=True)
+    # Тот же файл, что сторожит anti_cheat у meridian: в нём настоящие CRLF.
+    (repo / "DOCS" / "release_sentinel.txt").write_bytes(b"LINE_ONE\r\nSENTINEL_OK\r\n")
+    (repo / "sql" / "release_sentinel.txt").write_bytes(b"-- another file, same basename\n")
+    return repo
+
+
+def test_protected_file_is_copied_byte_for_byte(tmp_path: Path) -> None:
+    """Эталон обязан совпадать с копией репозитория побайтно, включая CRLF."""
+    repo = _repo_with_crlf(tmp_path)
+    task_dir = tmp_path / "task"
+
+    write_task_folder(
+        task_dir, make_case(), _draft_with_protected(["DOCS/release_sentinel.txt"]),
+        RunProfile(python_version="3.11", requirements_file=None), repo,
+    )
+
+    expected = task_dir / "tests" / "expected" / "DOCS" / "release_sentinel.txt.expected"
+    in_image = task_dir / "environment" / "repo" / "DOCS" / "release_sentinel.txt"
+    assert expected.read_bytes() == b"LINE_ONE\r\nSENTINEL_OK\r\n"
+    assert expected.read_bytes() == in_image.read_bytes()
+
+
+def test_same_named_protected_files_do_not_collide(tmp_path: Path) -> None:
+    """DOCS/release_sentinel.txt и sql/release_sentinel.txt — два разных эталона."""
+    repo = _repo_with_crlf(tmp_path)
+    task_dir = tmp_path / "task"
+
+    write_task_folder(
+        task_dir, make_case(),
+        _draft_with_protected(["DOCS/release_sentinel.txt", "sql/release_sentinel.txt"]),
+        RunProfile(python_version="3.11", requirements_file=None), repo,
+    )
+
+    expected_dir = task_dir / "tests" / "expected"
+    docs = expected_dir / "DOCS" / "release_sentinel.txt.expected"
+    sql = expected_dir / "sql" / "release_sentinel.txt.expected"
+    assert docs.read_bytes() != sql.read_bytes()
+    assert docs.read_bytes() == (repo / "DOCS" / "release_sentinel.txt").read_bytes()
+    assert sql.read_bytes() == (repo / "sql" / "release_sentinel.txt").read_bytes()
+
+
+def test_no_expected_file_is_collectable_by_pytest(tmp_path: Path) -> None:
+    """Даже если защищается тестовый файл репозитория, эталон не станет .py."""
+    repo = tmp_path / "repo"
+    (repo / "tests").mkdir(parents=True)
+    (repo / "tests" / "test_existing.py").write_text("def test_repo_own():\n    assert True\n", encoding="utf-8")
+    task_dir = tmp_path / "task"
+
+    write_task_folder(
+        task_dir, make_case(), _draft_with_protected(["tests/test_existing.py"]),
+        RunProfile(python_version="3.11", requirements_file=None), repo,
+    )
+
+    copied = list((task_dir / "tests" / "expected").rglob("*"))
+    assert [p.name for p in copied if p.is_file()] == ["test_existing.py.expected"]
+    assert not any(p.suffix == ".py" for p in copied if p.is_file())
+
+
+@pytest.mark.parametrize("bad_path", [
+    "../etc/passwd",
+    "/etc/passwd",
+    "DOCS\release_sentinel.txt",
+    "нет-такого-файла.txt",
+    "DOCS",
+])
+def test_bad_protected_path_is_a_draft_problem(tmp_path: Path, bad_path: str) -> None:
+    """Плохой путь — ошибка сборки черновика, а не молча пропущенная проверка."""
+    repo = _repo_with_crlf(tmp_path)
+    task_dir = tmp_path / "task"
+
+    with pytest.raises(TaskFolderError) as excinfo:
+        write_task_folder(
+            task_dir, make_case(), _draft_with_protected([bad_path]),
+            RunProfile(python_version="3.11", requirements_file=None), repo,
+        )
+
+    assert any("protected_files" in problem for problem in excinfo.value.problems)
+    assert not task_dir.exists()
+
+
+def test_draft_without_protected_files_is_unchanged(tmp_path: Path) -> None:
+    repo = _repo_with_crlf(tmp_path)
+    task_dir = tmp_path / "task"
+
+    write_task_folder(
+        task_dir, make_case(), _draft_with_protected([]),
+        RunProfile(python_version="3.11", requirements_file=None), repo,
+    )
+
+    assert not (task_dir / "tests" / "expected").exists()

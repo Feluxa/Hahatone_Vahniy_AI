@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from harness.contracts import Limits, MutantSource
 from harness.repo.workspace import copy_clean
+from harness.verify.docker import DockerRunner
 from harness.verify.mutation import hunk_revert_mutants, oracle_diff
+from harness.verify.runs import run_apply_solution
 
 GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden" / "settlement-001"
 MERIDIAN = Path(__file__).resolve().parents[2] / "materials" / "hackathon-participants" / "meridian"
@@ -107,3 +110,54 @@ def test_golden_solution_diff_and_mutants() -> None:
         mutant_names = {m.name for m in mutants}
         assert "hunk-1" in mutant_names
         assert "hunk-2" in mutant_names
+
+
+@pytest.mark.docker
+def test_golden_solution_applied_in_container_gives_same_mutants(tmp_path: Path) -> None:
+    """Решение, применённое в контейнере, даёт тот же дифф и тех же hunk-мутантов.
+
+    Эталон сверки — test_golden_solution_diff_and_mutants выше, который применяет тот же
+    скрипт на хосте. Харнессу так делать нельзя (solve.sh пишет модель), поэтому боевой путь
+    идёт через run_apply_solution, и здесь проверяется, что он даёт тот же результат.
+    """
+    base_repo = GOLDEN_DIR / "environment" / "repo"
+    if not base_repo.is_dir():
+        pytest.skip("materials/ не выложены, эталонная копия репозитория недоступна")
+
+    limits = Limits(
+        agent_timeout_sec=1800, verifier_timeout_sec=300, build_timeout_sec=1800,
+        cpus=2, memory_mb=4096, storage_mb=10240,
+    )
+    runner = DockerRunner()
+    image = "case-verifier:golden-apply-test"
+    build_log = tmp_path / "build.log"
+
+    build = runner.build(GOLDEN_DIR / "environment", image, timeout_sec=limits.build_timeout_sec,
+                         log_path=build_log)
+    assert build.ok, build_log.read_text(encoding="utf-8", errors="replace")[-2000:]
+
+    try:
+        oracle_repo = tmp_path / "oracle"
+        run = run_apply_solution(
+            task_dir=GOLDEN_DIR,
+            evidence_dir=tmp_path / "evidence",
+            image=image,
+            limits=limits,
+            oracle_repo=oracle_repo,
+            image_digest=build.image_digest,
+            runner=runner,
+        )
+        assert run.executed is True, run.note
+        assert run.name == "oracle/apply"
+
+        diff = oracle_diff(base_repo, oracle_repo)
+        assert diff.strip()
+        assert "NettingPolicy.py" in diff
+        assert "061_refresh_daily_settlement.sql" in diff
+
+        mutants = hunk_revert_mutants(diff)
+        assert len(mutants) == 2
+        assert {m.name for m in mutants} == {"hunk-1", "hunk-2"}
+        assert {m.source for m in mutants} == {MutantSource.HUNK_REVERT}
+    finally:
+        runner.remove_image(image)

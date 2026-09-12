@@ -1,6 +1,5 @@
-import re
 from pathlib import Path
-from harness.contracts import ProblemCategory, TestLists
+from harness.contracts import ProblemCategory, RepairTarget, TestLists
 from harness.verify.static_checks import check_task_folder
 
 
@@ -80,3 +79,74 @@ def test_solve_sh_no_false_positive(tmp_path: Path):
     problems = check_task_folder(task_dir, lists)
     sol_problems = [p for p in problems if p.category == ProblemCategory.SOLUTION_TOUCHES_TESTS]
     assert len(sol_problems) == 0
+
+
+def _task_with_tests(tmp_path: Path, code: str) -> Path:
+    task_dir = tmp_path / "task"
+    tests_dir = task_dir / "tests"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "test_case.py").write_text(code, encoding="utf-8")
+    return task_dir
+
+
+def test_async_test_function_is_a_problem(tmp_path: Path) -> None:
+    """async def test_* без pytest-asyncio не выполняется, а засчитывается пройденным."""
+    task_dir = _task_with_tests(
+        tmp_path,
+        "import asyncio\n\n\nasync def test_close() -> None:\n    assert await value() == 1\n",
+    )
+    lists = TestLists(fail_to_pass=["tests/test_case.py::test_close"], pass_to_pass=[], anti_cheat=[])
+
+    problems = check_task_folder(task_dir, lists)
+
+    async_problems = [p for p in problems if "async def" in p.details]
+    assert len(async_problems) == 1
+    assert async_problems[0].category == ProblemCategory.FORBIDDEN_MARKERS
+    assert async_problems[0].target == RepairTarget.TESTS
+    assert "test_close" in async_problems[0].details
+
+
+def test_async_test_method_in_class_is_a_problem(tmp_path: Path) -> None:
+    code = (
+        "class TestClose:\n"
+        "    async def test_inside(self) -> None:\n"
+        "        assert True\n"
+    )
+    task_dir = _task_with_tests(tmp_path, code)
+    lists = TestLists(fail_to_pass=["tests/test_case.py::TestClose::test_inside"],
+                      pass_to_pass=[], anti_cheat=[])
+
+    problems = check_task_folder(task_dir, lists)
+
+    assert any("async def test_inside" in p.details for p in problems)
+
+
+def test_sync_test_with_asyncio_run_is_allowed(tmp_path: Path) -> None:
+    """Правильный образец: синхронный тест, асинхронный сценарий внутри."""
+    code = (
+        "import asyncio\n\n\n"
+        "def test_close() -> None:\n"
+        "    async def scenario() -> None:\n"
+        "        assert True\n\n"
+        "    asyncio.run(scenario())\n"
+    )
+    task_dir = _task_with_tests(tmp_path, code)
+    lists = TestLists(fail_to_pass=["tests/test_case.py::test_close"], pass_to_pass=[], anti_cheat=[])
+
+    problems = check_task_folder(task_dir, lists)
+
+    assert [p.details for p in problems] == []
+
+
+def test_async_helper_without_test_prefix_is_allowed(tmp_path: Path) -> None:
+    code = (
+        "import asyncio\n\n\n"
+        "async def fetch_preview() -> int:\n"
+        "    return 1\n\n\n"
+        "def test_close() -> None:\n"
+        "    assert asyncio.run(fetch_preview()) == 1\n"
+    )
+    task_dir = _task_with_tests(tmp_path, code)
+    lists = TestLists(fail_to_pass=["tests/test_case.py::test_close"], pass_to_pass=[], anti_cheat=[])
+
+    assert check_task_folder(task_dir, lists) == []
