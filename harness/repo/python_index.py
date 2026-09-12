@@ -16,6 +16,10 @@ from pathlib import Path
 from harness.contracts import PythonSymbol
 
 MAX_SCAN_BYTES = 1 << 20
+# Сколько полей класса показывать: длинная модель не должна съедать контекст.
+MAX_CLASS_MEMBERS = 30
+
+ENUM_BASES = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "ReprEnum"})
 
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
@@ -131,9 +135,67 @@ def _is_private(name: str) -> bool:
 
 
 def _class_signature(node: ast.ClassDef) -> str:
+    """Базы плюс состав класса: поля с аннотациями, а для Enum — члены со значениями.
+
+    Без состава №2 не видит допустимых значений полей и выдумывает их: тест с несуществующим
+    значением Literal или Enum падает одинаково на исходном коде и на эталоне, и ремонт три
+    итерации правит решение вместо теста.
+    """
     bases = [ast.unparse(base) for base in node.bases]
     bases += [f"{keyword.arg}={ast.unparse(keyword.value)}" for keyword in node.keywords if keyword.arg]
-    return f"({', '.join(bases)})"
+    head = f"({', '.join(bases)})"
+    members = _enum_members(node) if _is_enum(node) else _annotated_fields(node)
+    if not members:
+        return head
+    if len(members) > MAX_CLASS_MEMBERS:
+        members = [*members[:MAX_CLASS_MEMBERS], "..."]
+    return f"{head} {{{'; '.join(members)}}}"
+
+
+def _is_enum(node: ast.ClassDef) -> bool:
+    """Enum по имени базы: репозиторий не импортируется, разбор только по ast."""
+    for base in node.bases:
+        name = _source(base).rsplit(".", 1)[-1]
+        if name in ENUM_BASES:
+            return True
+    return False
+
+
+def _annotated_fields(node: ast.ClassDef) -> list[str]:
+    """Поля с аннотациями: 'kind: Literal['purchase', 'refund']'."""
+    fields: list[str] = []
+    for statement in node.body:
+        if not isinstance(statement, ast.AnnAssign) or not isinstance(statement.target, ast.Name):
+            continue
+        name = statement.target.id
+        if _is_private(name):
+            continue
+        fields.append(f"{name}: {_source(statement.annotation)}")
+    return fields
+
+
+def _enum_members(node: ast.ClassDef) -> list[str]:
+    """Члены перечисления со значениями: 'PURCHASE = 'purchase''."""
+    members: list[str] = []
+    for statement in node.body:
+        if isinstance(statement, ast.AnnAssign):
+            target, value = statement.target, statement.value
+        elif isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+            target, value = statement.targets[0], statement.value
+        else:
+            continue
+        if not isinstance(target, ast.Name) or value is None or _is_private(target.id):
+            continue
+        members.append(f"{target.id} = {_source(value)}")
+    return members
+
+
+def _source(node: ast.AST) -> str:
+    """Исходный текст узла. Неразворачиваемая аннотация не повод ронять весь индекс."""
+    try:
+        return ast.unparse(node)
+    except Exception:
+        return "?"
 
 
 def _function_signature(node: FunctionNode) -> str:

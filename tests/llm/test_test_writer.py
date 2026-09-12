@@ -489,3 +489,12 @@ def test_syntax_problems_checks_every_file() -> None:
 
     assert len(problems) == 1
     assert problems[0].startswith("test_b.py:")
+
+
+def test_prompt_forbids_inventing_values_of_restricted_domains() -> None:
+    """Выдуманное значение Literal падает одинаково до и после решения — тест ничего не проверяет."""
+    prompt = _tests_prompt()
+
+    assert "Literal[...]" in prompt
+    assert "Не придумывай новые значения" in prompt
+    assert "pytest.raises" in prompt

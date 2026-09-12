@@ -184,7 +184,7 @@
       "path": "backend/src/components/settlement/domain/models/MerchantEventModel.py",
       "kind": "class",
       "qualname": "MerchantEventModel",
-      "signature": "(BaseModel)",
+      "signature": "(BaseModel) {tenant_id: str; event_id: str; merchant_id: str; occurred_at: datetime; kind: Literal['purchase', 'refund']; status: Literal['settled', 'pending', 'void']; currency: str; amount: Decimal}",
       "line": 8,
       "docstring": null
     },
@@ -264,7 +264,7 @@
       "path": "backend/src/components/settlement/domain/models/SettlementModel.py",
       "kind": "class",
       "qualname": "SettlementModel",
-      "signature": "(BaseModel)",
+      "signature": "(BaseModel) {tenant_id: str; merchant_id: str; business_date: date; currency: str; purchase_amount: Decimal; refund_amount: Decimal; net_amount: Decimal; event_count: int}",
       "line": 7,
       "docstring": null
     },
@@ -336,7 +336,7 @@
       "path": "backend/src/components/settlement/domain/models/CloseRequestModel.py",
       "kind": "class",
       "qualname": "CloseRequestModel",
-      "signature": "(BaseModel)",
+      "signature": "(BaseModel) {tenant_id: str; merchant_id: str; business_date: date; currency: str}",
       "line": 6,
       "docstring": null
     },

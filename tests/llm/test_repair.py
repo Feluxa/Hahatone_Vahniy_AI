@@ -476,3 +476,45 @@ def test_repair_with_uncompilable_tests_is_a_failed_iteration(
 
     assert repaired.test_files == sample_draft.test_files
     assert repaired.lists == sample_draft.lists
+
+
+def test_repair_does_not_touch_solution_when_only_tests_are_broken(
+    sample_context: RepoContext, sample_draft: CaseDraft,
+) -> None:
+    """Диагноз test_invalid ведёт в тесты; solve.sh на такой итерации не переписывается."""
+    verdict = Verdict(
+        ok=False,
+        problems=[Problem(
+            category=ProblemCategory.TEST_INVALID,
+            target=RepairTarget.TESTS,
+            details="Тест падает одинаково на исходном коде и на эталоне: ValidationError",
+            test_ids=["tests/test_settlement.py::test_initial"],
+        )],
+        runs=["base/full", "oracle/full"],
+    )
+    client = _client_returning({
+        "test_file_name": "test_settlement.py",
+        "test_file_content": "def test_initial():\n    assert False\n",
+        "fail_to_pass": ["tests/test_settlement.py::test_initial"],
+        "pass_to_pass": [],
+        "anti_cheat": [],
+    })
+
+    repaired = repair(client, sample_context, sample_draft, verdict, {})
+
+    assert repaired.solution_files == sample_draft.solution_files
+    assert repaired.instruction_md == sample_draft.instruction_md
+    assert "def test_initial" in repaired.test_files["test_settlement.py"]
+    # Ровно один вызов модели — только ремонт тестов.
+    assert client.complete.call_count == 1
+    assert client.complete.call_args.kwargs["purpose"] == "repair:tests"
+
+
+def test_repair_prompt_explains_test_invalid() -> None:
+    prompt = (Path(__file__).resolve().parents[2] / "harness" / "llm" / "prompts" / "repair.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "test_invalid" in prompt
+    assert "НЕ ТРОГАЙ solve.sh" in prompt
+    assert "pytest.raises" in prompt

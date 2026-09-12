@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.repo.python_index import find_imports, index_python
+from harness.repo.python_index import MAX_CLASS_MEMBERS, find_imports, index_python
 from tests.repo.tiny_repo import build_repo
 
 MERIDIAN = Path(__file__).resolve().parents[2] / "materials" / "hackathon-participants" / "meridian"
@@ -91,10 +91,11 @@ def test_async_method_is_marked_in_signature(module_repo: Path) -> None:
     assert symbol.signature == "async (self, *, timeout: float) -> None"
 
 
-def test_class_signature_is_its_bases(module_repo: Path) -> None:
+def test_class_signature_is_its_bases_and_fields(module_repo: Path) -> None:
     symbols = {s.qualname: s for s in index_python(module_repo, ["pkg/module.py"])}
     assert symbols["Outer"].kind == "class"
-    assert symbols["Outer"].signature == "()"
+    # Базы плюс поля с аннотациями: по ним №2 узнаёт допустимые значения.
+    assert symbols["Outer"].signature == "() {attribute: int}"
     assert symbols["Outer"].docstring == "Outer class."
     assert symbols["Outer.Inner"].signature == "(Outer)"
     assert symbols["Outer.Inner"].docstring is None
@@ -180,3 +181,73 @@ def test_meridian_preview_query_imports_stay_inside_component() -> None:
         "backend/src/components/settlement/domain/models/SettlementModel.py",
         "backend/src/components/settlement/infrastructure/repositories/core/IMerchantEventRepository.py",
     ]
+
+
+def test_class_fields_with_restricted_domains_are_indexed(tmp_path: Path) -> None:
+    """Без допустимых значений в контексте модель их выдумывает — и тест падает на валидации."""
+    (tmp_path / "models.py").write_text(
+        "from enum import Enum\n"
+        "from typing import Literal\n"
+        "from decimal import Decimal\n\n\n"
+        "class EventKind(str, Enum):\n"
+        '    PURCHASE = "purchase"\n'
+        '    REFUND = "refund"\n\n\n'
+        "class EventModel(BaseModel):\n"
+        '    kind: Literal["purchase", "refund"]\n'
+        "    amount: Decimal\n"
+        '    status: str = "settled"\n'
+        "    _hidden: int = 0\n",
+        encoding="utf-8",
+    )
+
+    symbols = {s.qualname: s for s in index_python(tmp_path, ["models.py"])}
+
+    enum_signature = symbols["EventKind"].signature
+    assert "(str, Enum)" in enum_signature
+    assert "PURCHASE = 'purchase'" in enum_signature
+    assert "REFUND = 'refund'" in enum_signature
+
+    model_signature = symbols["EventModel"].signature
+    assert "(BaseModel)" in model_signature
+    assert "kind: Literal['purchase', 'refund']" in model_signature
+    assert "amount: Decimal" in model_signature
+    assert "status: str" in model_signature
+    # Приватное поле в контекст не уезжает.
+    assert "_hidden" not in model_signature
+
+
+def test_class_without_annotated_fields_keeps_bare_signature(tmp_path: Path) -> None:
+    (tmp_path / "plain.py").write_text(
+        "class Service:\n    def run(self) -> None: ...\n", encoding="utf-8",
+    )
+
+    symbols = {s.qualname: s for s in index_python(tmp_path, ["plain.py"])}
+
+    assert symbols["Service"].signature == "()"
+
+
+def test_unparsable_annotation_does_not_break_the_index(tmp_path: Path) -> None:
+    """Аннотация пишется исходным текстом; сломать индекс она не должна."""
+    (tmp_path / "odd.py").write_text(
+        "class Odd:\n"
+        '    weird: "dict[str, list[int]] | None"\n'
+        "    plain: int\n",
+        encoding="utf-8",
+    )
+
+    symbols = {s.qualname: s for s in index_python(tmp_path, ["odd.py"])}
+
+    signature = symbols["Odd"].signature
+    assert "weird:" in signature
+    assert "plain: int" in signature
+
+
+def test_long_model_is_truncated(tmp_path: Path) -> None:
+    """Модель на сотню полей не должна съедать контекст."""
+    fields = "\n".join(f"    field_{i}: int" for i in range(50))
+    (tmp_path / "big.py").write_text(f"class Big:\n{fields}\n", encoding="utf-8")
+
+    signature = index_python(tmp_path, ["big.py"])[0].signature
+
+    assert signature.count(";") <= MAX_CLASS_MEMBERS
+    assert signature.endswith("...}")

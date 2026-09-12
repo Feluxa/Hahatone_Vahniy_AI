@@ -10,6 +10,7 @@ from harness.contracts import (
     RunResult,
     TestLists,
     TestOutcome,
+    TestReport,
     Verdict,
 )
 from harness.verify.runs import APPLY_SOLUTION_RUN
@@ -107,6 +108,58 @@ def reclassify_by_outcomes(
     )
 
 
+def invalid_tests(runs: list[RunResult]) -> dict[str, TestReport]:
+    """Тесты, которые невалидны сами по себе, а не ловят дефект продукта.
+
+    Признак: один и тот же тест падает и на исходном коде, и на эталоне с одним и тем же
+    исключением, и это не AssertionError. Продукт между прогонами меняется, исключение — нет,
+    значит дело не в нём: неверные входные данные, несуществующее поле, недопустимое значение
+    ограниченного домена.
+
+    Различать это обязательно: иначе тот же случай приходит в ремонт как ORACLE_FAILED плюс
+    BASE_GUARD_FAILED плюс «reward is 0», читается как «сломан продукт», и ремонт итерацию
+    за итерацией правит solve.sh вместо теста.
+    """
+    seen: dict[RunKind, dict[str, dict[str, TestReport]]] = {RunKind.BASE: {}, RunKind.ORACLE: {}}
+    for run in runs:
+        bucket = seen.get(run.kind)
+        if bucket is None or not run.executed:
+            continue
+        for test_id, report in run.tests.items():
+            exception_type = report.exception_type
+            if not exception_type or exception_type == "AssertionError":
+                continue
+            if report.outcome not in (TestOutcome.FAILED, TestOutcome.ERROR):
+                continue
+            bucket.setdefault(test_id, {}).setdefault(exception_type, report)
+
+    invalid: dict[str, TestReport] = {}
+    for test_id, base_types in seen[RunKind.BASE].items():
+        shared = sorted(set(base_types) & set(seen[RunKind.ORACLE].get(test_id, {})))
+        if shared:
+            invalid[test_id] = base_types[shared[0]]
+    return invalid
+
+
+def _invalid_test_problem(test_id: str, report: TestReport) -> Problem:
+    return Problem(
+        category=ProblemCategory.TEST_INVALID,
+        target=RepairTarget.TESTS,
+        details=(
+            f"Тест {test_id} падает одинаково на исходном коде и на эталоне: "
+            f"{report.exception_type}: {report.message}. "
+            f"Продукт тут ни при чём — невалиден сам тест (неверные входные данные, "
+            f"несуществующее поле или недопустимое значение). Исправь тест, не решение."
+        ),
+        test_ids=[test_id],
+    )
+
+
+def _touches_invalid(run: RunResult, skip: set[str]) -> bool:
+    """Прогон, в котором участвовал невалидный тест: его reward ничего не говорит о продукте."""
+    return any(test_id in skip for test_id in run.tests)
+
+
 def _check_executed(
     run: RunResult, problems: list[Problem], *, target: RepairTarget = RepairTarget.ENVIRONMENT,
 ) -> bool:
@@ -137,9 +190,13 @@ def _check_reward(run: RunResult, expected: int, problems: list[Problem], target
         ))
 
 
-def _check_fail_to_pass(run: RunResult, test_ids: list[str], problems: list[Problem]) -> None:
+def _check_fail_to_pass(
+    run: RunResult, test_ids: list[str], problems: list[Problem], skip: set[str],
+) -> None:
     """На исходном коде каждый fail_to_pass обязан падать, и именно по assert."""
     for test_id in test_ids:
+        if test_id in skip:
+            continue
         report = run.tests.get(test_id)
         if report is None or report.outcome == TestOutcome.MISSING:
             problems.append(Problem(
@@ -172,9 +229,11 @@ def _check_fail_to_pass(run: RunResult, test_ids: list[str], problems: list[Prob
 
 def _check_all_passed(
     run: RunResult, test_ids: list[str], problems: list[Problem], *,
-    category: ProblemCategory, target: RepairTarget,
+    category: ProblemCategory, target: RepairTarget, skip: set[str],
 ) -> None:
     for test_id in test_ids:
+        if test_id in skip:
+            continue
         report = run.tests.get(test_id)
         if report is None or report.outcome != TestOutcome.PASSED:
             outcome = report.outcome.value if report else "missing"
@@ -194,6 +253,14 @@ def decide(
 ) -> Verdict:
     """Анализирует результаты всех прогонов и статические проверки, формируя итоговый вердикт."""
     problems: list[Problem] = list(static_problems)
+
+    # 0. Тесты, невалидные сами по себе. Диагноз ставится первым и вытесняет остальные:
+    # ORACLE_FAILED, BASE_GUARD_FAILED и «reward is N» по такому тесту увели бы ремонт
+    # в solve.sh, хотя чинить надо тест.
+    broken = invalid_tests(runs)
+    for test_id, report in broken.items():
+        problems.append(_invalid_test_problem(test_id, report))
+    skip = set(broken)
 
     # 1. Проверка дубликатов между списками
     dups = lists.duplicates()
@@ -270,11 +337,13 @@ def decide(
     if "base/full" in runs_by_name:
         base_run = runs_by_name["base/full"]
         if _check_executed(base_run, problems):
-            _check_reward(base_run, EXPECTED_REWARD["base/full"], problems, RepairTarget.TESTS)
-            _check_fail_to_pass(base_run, lists.fail_to_pass, problems)
+            if not _touches_invalid(base_run, skip):
+                _check_reward(base_run, EXPECTED_REWARD["base/full"], problems, RepairTarget.TESTS)
+            _check_fail_to_pass(base_run, lists.fail_to_pass, problems, skip)
             _check_all_passed(
                 base_run, lists.pass_to_pass + lists.anti_cheat, problems,
                 category=ProblemCategory.BASE_GUARD_FAILED, target=RepairTarget.TESTS,
+                skip=skip,
             )
 
     # 5a. Проверка base по каждому списку отдельно (PROTOCOL §5.6)
@@ -282,24 +351,30 @@ def decide(
         list_run = runs_by_name.get(run_name)
         if list_run is None or not _check_executed(list_run, problems):
             continue
-        _check_reward(list_run, EXPECTED_REWARD[run_name], problems, RepairTarget.TESTS)
+        if not _touches_invalid(list_run, skip):
+            _check_reward(list_run, EXPECTED_REWARD[run_name], problems, RepairTarget.TESTS)
         test_ids: list[str] = getattr(lists, list_name)
         if list_name == "fail_to_pass":
-            _check_fail_to_pass(list_run, test_ids, problems)
+            _check_fail_to_pass(list_run, test_ids, problems, skip)
         else:
             _check_all_passed(
                 list_run, test_ids, problems,
                 category=ProblemCategory.BASE_GUARD_FAILED, target=RepairTarget.TESTS,
+                skip=skip,
             )
 
     # 6. Проверка oracle/full
     if "oracle/full" in runs_by_name:
         oracle_run = runs_by_name["oracle/full"]
         if _check_executed(oracle_run, problems):
-            _check_reward(oracle_run, EXPECTED_REWARD["oracle/full"], problems, RepairTarget.SOLUTION)
+            if not _touches_invalid(oracle_run, skip):
+                _check_reward(
+                    oracle_run, EXPECTED_REWARD["oracle/full"], problems, RepairTarget.SOLUTION,
+                )
             _check_all_passed(
                 oracle_run, lists.all_ids(), problems,
                 category=ProblemCategory.ORACLE_FAILED, target=RepairTarget.SOLUTION,
+                skip=skip,
             )
 
     # 6a. Проверка oracle по каждому списку отдельно (PROTOCOL §5.6)
@@ -307,10 +382,12 @@ def decide(
         list_run = runs_by_name.get(run_name)
         if list_run is None or not _check_executed(list_run, problems, target=RepairTarget.SOLUTION):
             continue
-        _check_reward(list_run, EXPECTED_REWARD[run_name], problems, RepairTarget.SOLUTION)
+        if not _touches_invalid(list_run, skip):
+            _check_reward(list_run, EXPECTED_REWARD[run_name], problems, RepairTarget.SOLUTION)
         _check_all_passed(
             list_run, getattr(lists, list_name), problems,
             category=ProblemCategory.ORACLE_FAILED, target=RepairTarget.SOLUTION,
+            skip=skip,
         )
 
     # 6b. Применение решения для мутантов. Пустой список hunk-мутантов из-за сбоя контейнера

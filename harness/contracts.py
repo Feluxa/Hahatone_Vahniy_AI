@@ -291,6 +291,8 @@ class ProblemCategory(str, Enum):
     TASK_DIR_DIRTY = "task_dir_dirty"          # логи, кэши, .git, .venv в task/
     TIMEOUT = "timeout"
     INTERNAL = "internal"
+    # Тест падает одинаково до и после решения не по assert: невалиден сам тест, не продукт.
+    TEST_INVALID = "test_invalid"
 
 
 class RepairTarget(str, Enum):

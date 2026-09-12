@@ -10,7 +10,12 @@ from harness.contracts import (
 )
 import pytest
 
-from harness.verify.verdict import EXPECTED_REWARD, decide, reclassify_by_outcomes
+from harness.verify.verdict import (
+    EXPECTED_REWARD,
+    decide,
+    invalid_tests,
+    reclassify_by_outcomes,
+)
 
 
 def _make_sample_lists() -> TestLists:
@@ -541,3 +546,101 @@ def test_failed_collect_problem_carries_the_error_text() -> None:
     assert "SyntaxError: 'async with' outside async function" in problem.details
     assert "test_case.py" in problem.details
     assert problem.target == RepairTarget.TESTS
+
+
+_VALIDATION_ERROR = TestReport(
+    outcome=TestOutcome.ERROR,
+    exception_type="ValidationError",
+    message="1 validation error for Model: kind — input should be 'purchase' or 'refund'",
+)
+
+
+def test_invalid_test_gets_one_problem_and_no_product_diagnosis() -> None:
+    """Тест падает одинаково до и после решения: виноват тест, а не продукт."""
+    lists = _make_sample_lists()
+    base_tests = {_F2P: _FAILED, _P2P: _VALIDATION_ERROR, _AC: _PASSED}
+    oracle_tests = {_F2P: _PASSED, _P2P: _VALIDATION_ERROR, _AC: _PASSED}
+    runs = [
+        _run("base/full", RunKind.BASE, RunScope.FULL, base_tests, 0),
+        _run("oracle/full", RunKind.ORACLE, RunScope.FULL, oracle_tests, 0),
+    ]
+
+    verdict = decide(runs, lists, [])
+
+    assert verdict.ok is False
+    assert len(verdict.problems) == 1
+    problem = verdict.problems[0]
+    assert problem.category == ProblemCategory.TEST_INVALID
+    assert problem.target == RepairTarget.TESTS
+    assert problem.test_ids == [_P2P]
+    assert "ValidationError" in problem.details
+    assert "Исправь тест, не решение" in problem.details
+
+    # Ничего из того, что увело бы ремонт в solve.sh.
+    categories = {p.category for p in verdict.problems}
+    assert ProblemCategory.ORACLE_FAILED not in categories
+    assert ProblemCategory.BASE_GUARD_FAILED not in categories
+    assert ProblemCategory.BASE_NOT_ASSERTION not in categories
+    assert ProblemCategory.REWARD_WRONG not in categories
+    assert not any(p.target == RepairTarget.SOLUTION for p in verdict.problems)
+
+
+def test_invalid_test_in_fail_to_pass_is_not_diagnosed_as_product() -> None:
+    """Тот же диагноз, если невалидный тест объявлен в fail_to_pass."""
+    lists = TestLists(fail_to_pass=[_F2P], pass_to_pass=[], anti_cheat=[])
+    runs = [
+        _run("base/full", RunKind.BASE, RunScope.FULL, {_F2P: _VALIDATION_ERROR}, 0),
+        _run("oracle/full", RunKind.ORACLE, RunScope.FULL, {_F2P: _VALIDATION_ERROR}, 0),
+    ]
+
+    verdict = decide(runs, lists, [])
+
+    assert [p.category for p in verdict.problems] == [ProblemCategory.TEST_INVALID]
+
+
+def test_defect_catcher_diagnosis_is_unchanged() -> None:
+    """Падает на base по assert и проходит на oracle — обычный fail_to_pass, как раньше."""
+    lists = TestLists(fail_to_pass=[_F2P], pass_to_pass=[_P2P], anti_cheat=[_AC])
+    base_tests = {_F2P: _FAILED, _P2P: _PASSED, _AC: _PASSED}
+    oracle_tests = {_F2P: _PASSED, _P2P: _PASSED, _AC: _PASSED}
+    runs = [
+        _run("base/full", RunKind.BASE, RunScope.FULL, base_tests, 0),
+        _run("oracle/full", RunKind.ORACLE, RunScope.FULL, oracle_tests, 1),
+    ]
+
+    verdict = decide(runs, lists, [])
+
+    assert verdict.ok is True, [p.details for p in verdict.problems]
+    assert invalid_tests(runs) == {}
+
+
+def test_different_exception_on_base_and_oracle_is_not_invalid() -> None:
+    """Разные исключения — продукт всё-таки влияет, это не «тест сам по себе сломан»."""
+    runs = [
+        _run("base/full", RunKind.BASE, RunScope.FULL,
+             {_P2P: TestReport(outcome=TestOutcome.ERROR, exception_type="KeyError", message="k")}, 0),
+        _run("oracle/full", RunKind.ORACLE, RunScope.FULL,
+             {_P2P: TestReport(outcome=TestOutcome.ERROR, exception_type="TypeError", message="t")}, 1),
+    ]
+
+    assert invalid_tests(runs) == {}
+
+
+def test_same_assertion_on_base_and_oracle_is_not_invalid() -> None:
+    """AssertionError на обоих — это провал продукта или теста по существу, не наш случай."""
+    runs = [
+        _run("base/full", RunKind.BASE, RunScope.FULL, {_P2P: _FAILED}, 0),
+        _run("oracle/full", RunKind.ORACLE, RunScope.FULL, {_P2P: _FAILED}, 1),
+    ]
+
+    assert invalid_tests(runs) == {}
+
+
+def test_invalid_test_detected_across_list_runs() -> None:
+    """Диагноз ставится и по прогонам списков, не только по полным."""
+    runs = [
+        _run("base/anti_cheat", RunKind.BASE, RunScope.ANTI_CHEAT, {_AC: _VALIDATION_ERROR}, 0),
+        _run("oracle/anti_cheat", RunKind.ORACLE, RunScope.ANTI_CHEAT, {_AC: _VALIDATION_ERROR}, 0),
+    ]
+
+    assert set(invalid_tests(runs)) == {_AC}
