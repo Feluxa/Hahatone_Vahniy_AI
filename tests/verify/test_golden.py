@@ -5,9 +5,28 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+import pytest
+
+from harness.repo.workspace import copy_clean
 from harness.verify.mutation import hunk_revert_mutants, oracle_diff
 
 GOLDEN_DIR = Path(__file__).resolve().parents[2] / "golden" / "settlement-001"
+MERIDIAN = Path(__file__).resolve().parents[2] / "materials" / "hackathon-participants" / "meridian"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def golden_base_repo() -> None:
+    """Собирает golden/settlement-001/environment/repo, если его ещё нет.
+
+    Исходный репозиторий внутри эталонного кейса не хранится в git (см. .gitignore), поэтому
+    на чистой машине его надо получить из materials/ чистой копией — теми же правилами, по которым
+    его соберёт харнесс. Если materials/ не выложены, фикстура ничего не делает: тесту, которому
+    копия нужна, есть что сказать об этом самому.
+    """
+    base_repo = GOLDEN_DIR / "environment" / "repo"
+    if base_repo.exists() or not MERIDIAN.is_dir():
+        return
+    copy_clean(MERIDIAN, base_repo)
 
 
 def test_golden_task_toml_validity() -> None:
