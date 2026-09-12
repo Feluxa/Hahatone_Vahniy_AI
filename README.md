@@ -57,7 +57,8 @@ python -m harness run materials/hackathon-participants/inputs/settlement.json
 | repo.profile (№1) | готово | `detect_run_profile(repo) -> RunProfile`; деградирует до дефолтов, `ProfileError` только на структурных проблемах; `tests/repo/test_profile.py` |
 | repo.python_index, repo.sql_index (№1) | готово | `index_python` (+`find_imports`), `index_sql`; `tests/repo/test_python_index.py`, `test_sql_index.py` |
 | repo.context (№1) | готово | `build_context(repo, brief, max_files=20)`; на meridian — 20 файлов, без `components/lending` и `payments`; `fixtures/repo_context.settlement.json` (перегенерация — `.venv/Scripts/python.exe -m tests.repo.regen_settlement_fixture`) |
-| manifest, task_folder (№1) | заглушки | |
+| build.manifest (№1) | готово | `render_task_toml(case, spec, lists)` повторяет `example-case/task.toml` дословно, `read_test_lists(task.toml)` — обратно; списки проверяются на запись и на чтение, `ManifestError.problems`; `tests/build/test_manifest.py` |
+| build.task_folder (№1) | готово | `write_task_folder(task_dir, case, draft, profile, workspace_repo)`; структура по PROTOCOL §3, всё своё пишется с LF, `environment/repo/` — `copy_clean`; на черновике из `golden/settlement-001` даёт тот же набор файлов; `tests/build/test_task_folder.py` |
 | environment, verify, summary, golden (№3) | готово | покрыто tests/verify/ и tests/build/ |
 | llm, usage (№2) | заглушки | |
 | pipeline, cli, static_checks (№4) | заглушки | |
