@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# Префикс имени альтернативного решения. Ставится харнессом, а не моделью: по нему вердикт
+# отличает прогон, который обязан пройти тесты, от мутанта, который обязан их провалить.
+ALT_SOLUTION_NAME_PREFIX = "alt-solution-"
+
 
 def _load_prompt(filename: str) -> str:
     path = PROMPTS_DIR / filename
@@ -48,6 +52,19 @@ def _format_context_for_mutants(context: RepoContext, draft: CaseDraft, oracle_d
     return "\n".join(lines)
 
 
+def _normalize_repo_path(raw: str) -> str:
+    """Путь от модели к виду 'каталог/файл.py' — без обрезания '..'.
+
+    Прежний lstrip('./') снимал ведущие точки посимвольно и превращал '../outside.py'
+    в 'outside.py': проверка на выход за пределы /app/repo после этого уже ничего не
+    находила. Снимается только явный префикс './'.
+    """
+    path = raw.strip().replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+
 def _replacement_problem(file_path: str, anchor: str, replacement: str) -> str | None:
     """Почему замену нельзя применить. None — мутант годится.
 
@@ -76,6 +93,42 @@ def _sanitize_name(name: str, index: int) -> str:
     return cleaned
 
 
+def _request_replacement_items(
+    client: LlmClient, *, system: str, user: str, purpose: str, collection_key: str,
+) -> list[dict[str, Any]]:
+    """Запрашивает у модели JSON-массив замен и разбирает его, с одной попыткой ремонта.
+
+    Формат замены общий для мутантов и альтернативных решений, поэтому и разбор общий:
+    массив объектов, объект с массивом внутри или одиночный объект.
+    """
+    resp = client.complete(system=system, user=user, purpose=purpose)
+
+    try:
+        data = extract_json(resp.text)
+    except ParsingError as err:
+        logger.warning("Initial %s JSON parsing failed (%s), requesting repair...", purpose, err)
+        repair_user = (
+            f"Не удалось разобрать ответ как JSON ({purpose}): {err}\n"
+            f"Верни СТРОГО валидный JSON-массив объектов с ключами "
+            f"'name', 'description', 'file_path', 'anchor', 'replacement'."
+        )
+        retry_resp = client.complete(
+            system=system, user=repair_user, purpose=f"{purpose}:repair"
+        )
+        try:
+            data = extract_json(retry_resp.text)
+        except ParsingError:
+            return []
+
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        if collection_key in data and isinstance(data[collection_key], list):
+            return [item for item in data[collection_key] if isinstance(item, dict)]
+        return [data]
+    return []
+
+
 def write_mutants(
     client: LlmClient, context: RepoContext, draft: CaseDraft, oracle_diff: str
 ) -> list[Mutant]:
@@ -83,40 +136,20 @@ def write_mutants(
     system_prompt = _load_prompt("mutants.md")
     user_prompt = _format_context_for_mutants(context, draft, oracle_diff)
 
-    resp = client.complete(system=system_prompt, user=user_prompt, purpose="mutants")
-
-    try:
-        data = extract_json(resp.text)
-    except ParsingError as err:
-        logger.warning("Initial mutants JSON parsing failed (%s), requesting repair...", err)
-        repair_user = (
-            f"Не удалось разобрать ответ как JSON с мутантами: {err}\n"
-            f"Верни СТРОГО валидный JSON-массив объектов с ключами "
-            f"'name', 'description', 'file_path', 'anchor', 'replacement'."
-        )
-        retry_resp = client.complete(
-            system=system_prompt, user=repair_user, purpose="mutants:repair"
-        )
-        try:
-            data = extract_json(retry_resp.text)
-        except ParsingError:
-            return []
-
-    raw_list: list[dict[str, Any]] = []
-    if isinstance(data, list):
-        raw_list = [item for item in data if isinstance(item, dict)]
-    elif isinstance(data, dict):
-        if "mutants" in data and isinstance(data["mutants"], list):
-            raw_list = [item for item in data["mutants"] if isinstance(item, dict)]
-        else:
-            raw_list = [data]
+    raw_list = _request_replacement_items(
+        client,
+        system=system_prompt,
+        user=user_prompt,
+        purpose="mutants",
+        collection_key="mutants",
+    )
 
     mutants: list[Mutant] = []
     for idx, item in enumerate(raw_list, start=1):
         raw_name = str(item.get("name", f"mutant-{idx}"))
         name = _sanitize_name(raw_name, idx)
         description = str(item.get("description", "LLM-generated mutant")).strip()
-        file_path = str(item.get("file_path", "")).strip().replace("\\", "/").lstrip("./")
+        file_path = _normalize_repo_path(str(item.get("file_path", "")))
         anchor = str(item.get("anchor", ""))
         replacement = str(item.get("replacement", ""))
 
@@ -138,3 +171,65 @@ def write_mutants(
         )
 
     return mutants
+
+
+def _sanitize_alt_name(name: str, index: int) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_\-]+", "-", name.strip().lower()).strip("-")
+    if not cleaned:
+        cleaned = f"variant-{index}"
+    if not cleaned.startswith(ALT_SOLUTION_NAME_PREFIX):
+        cleaned = f"{ALT_SOLUTION_NAME_PREFIX}{cleaned}"
+    return cleaned
+
+
+def write_alternative_solutions(
+    client: LlmClient, context: RepoContext, draft: CaseDraft, oracle_diff: str, *, limit: int = 2
+) -> list[Mutant]:
+    """Эквивалентные переписывания эталонного решения, которые тесты обязаны принять.
+
+    PROTOCOL §5.7: проверки принимают альтернативные корректные реализации. Мутанты
+    проверяют только одну сторону — что неправильное решение отвергается; без этой
+    проверки нельзя отличить тесты, проверяющие поведение, от тестов, переобученных
+    на конкретный дифф эталона.
+
+    Технически это тот же мутант-замена, что и остальные, но с expected_reward=1:
+    прогон и применение уже есть, отличается только ожидание от результата.
+    """
+    system_prompt = _load_prompt("alternative.md")
+    user_prompt = _format_context_for_mutants(context, draft, oracle_diff)
+
+    raw_list = _request_replacement_items(
+        client,
+        system=system_prompt,
+        user=user_prompt,
+        purpose="alternatives",
+        collection_key="alternatives",
+    )
+
+    variants: list[Mutant] = []
+    for idx, item in enumerate(raw_list[:limit], start=1):
+        name = _sanitize_alt_name(str(item.get("name", f"variant-{idx}")), idx)
+        description = str(item.get("description", "LLM-generated alternative solution")).strip()
+        file_path = _normalize_repo_path(str(item.get("file_path", "")))
+        anchor = str(item.get("anchor", ""))
+        replacement = str(item.get("replacement", ""))
+
+        problem = _replacement_problem(file_path, anchor, replacement)
+        if problem is not None:
+            logger.warning("Альтернативное решение %s отброшено: %s", name, problem)
+            continue
+
+        variants.append(
+            Mutant(
+                name=name,
+                source=MutantSource.ALTERNATIVE_SOLUTION,
+                description=description,
+                patch="",
+                file_path=file_path,
+                anchor=anchor,
+                replacement=replacement,
+                expected_reward=1,
+            )
+        )
+
+    return variants

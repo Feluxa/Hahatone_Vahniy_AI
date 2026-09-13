@@ -89,6 +89,9 @@ def _stub_pipeline(monkeypatch: pytest.MonkeyPatch, *, verdict: Verdict, runs: l
     )
     monkeypatch.setattr(pipeline, "write_solution", lambda client, ctx, spec: {"solve.sh": "#!/bin/sh\n"})
     monkeypatch.setattr(pipeline, "write_mutants", lambda client, ctx, draft, text: [])
+    monkeypatch.setattr(
+        pipeline, "write_alternative_solutions", lambda client, ctx, draft, text: [],
+    )
     monkeypatch.setattr(pipeline, "repair", lambda client, ctx, draft, verdict, logs: draft)
 
     def _write_task_folder(task_dir, case, draft, run_profile, workspace_repo) -> None:

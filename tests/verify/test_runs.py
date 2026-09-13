@@ -267,6 +267,8 @@ def test_replacement_mutant_is_applied_by_the_harness(tmp_path: Path) -> None:
         "file_path": "backend/NettingPolicy.py",
         "anchor": "net = purchases - refunds",
         "replacement": "net = purchases + refunds",
+        "source": "llm",
+        "expected_reward": 0,
     }
     applier = (runner.log_dir / "apply_mutant.py").read_text(encoding="utf-8")
     compile(applier, "apply_mutant.py", "exec")

@@ -21,6 +21,10 @@ LOGGER = logging.getLogger(__name__)
 # Всё остальное в mutant/* — наши hunk-revert мутанты из diff эталонного решения.
 LLM_MUTANT_PREFIX = "mutant/llm-mutant-"
 
+# Альтернативное корректное решение: тот же прогон замены, но ожидание обратное —
+# тесты обязаны его ПРИНЯТЬ (reward 1). Префикс ставит mutant_writer._sanitize_alt_name.
+ALT_SOLUTION_PREFIX = "mutant/alt-solution-"
+
 # Прогоны по спискам (PROTOCOL §5.6: каждый список проверяется отдельно на base и oracle).
 # Имена задаёт runs.run_base_and_oracle; отсутствующий прогон означает пустой список.
 BASE_LIST_RUNS: dict[str, str] = {
@@ -200,6 +204,57 @@ def _is_syntax_or_import_breaker(run: RunResult) -> bool:
 
     outcomes = {rep.outcome for rep in run.tests.values()}
     return not (outcomes & {TestOutcome.FAILED, TestOutcome.PASSED})
+
+
+def _check_alternative_solution(
+    run: RunResult, problems: list[Problem], checked: list[str],
+) -> None:
+    """Альтернативное корректное решение обязано ПРОЙТИ тесты (PROTOCOL §5.7).
+
+    Мутанты проверяют только одну сторону — что неправильное решение отвергается. Тесты,
+    переобученные на конкретный дифф эталона, эту сторону проходят полностью и всё равно
+    наказывают агента за корректную реализацию, написанную иначе.
+
+    Прогон, который не дошёл до тестов (патч не применился, сломался сбор), ничего не
+    доказывает ни за, ни против: винить в этом тесты нельзя, поэтому проблема не заводится,
+    а отсутствие проверки уезжает в limitations отдельной нотой.
+    """
+    if not run.executed or run.reward is None:
+        LOGGER.info(
+            "Альтернативное решение %s не проверено: прогон не дошёл до тестов (executed=%s, note=%s)",
+            run.name, run.executed, run.note,
+        )
+        return
+
+    if run.reward == 1:
+        checked.append(run.name)
+        return
+
+    if _is_syntax_or_import_breaker(run):
+        # Сломался сам вариант, а не тесты: отвергать нечего, проверка не состоялась.
+        LOGGER.warning(
+            "Альтернативное решение %s не проверено: вызвало сбой импорта/синтаксиса", run.name,
+        )
+        return
+
+    failed = sorted(
+        test_id for test_id, report in run.tests.items()
+        if report.outcome in (TestOutcome.FAILED, TestOutcome.ERROR)
+    )
+    checked.append(run.name)
+    problems.append(Problem(
+        category=ProblemCategory.ALTERNATIVE_SOLUTION_FAILED,
+        target=RepairTarget.TESTS,
+        details=(
+            f"Альтернативное корректное решение {run.name} отвергнуто тестами (reward=0). "
+            f"Не прошли: {', '.join(failed) if failed else 'список тестов не разобран'}. "
+            f"Проверка привязана к тексту эталонного решения, а не к его поведению "
+            f"(PROTOCOL §5.7). Ослабь проверку до наблюдаемого результата, не удаляя её "
+            f"и не снижая строгости к неправильным решениям."
+        ),
+        test_ids=failed,
+        run_names=[run.name],
+    ))
 
 
 def _check_executed(
@@ -480,11 +535,17 @@ def decide(
     # а не из-за сломанного синтаксиса или сбоя импорта (PROTOCOL §5.4).
     valid_independent_mutants: list[str] = []
     has_mutant_runs = False
+    alternatives_checked: list[str] = []
     notes_list = list(notes or [])
 
     for r in runs:
         if r.kind != RunKind.MUTANT:
             continue
+
+        if r.name.startswith(ALT_SOLUTION_PREFIX):
+            _check_alternative_solution(r, problems, alternatives_checked)
+            continue
+
         has_mutant_runs = True
         if r.executed and r.reward == 0:
             if _is_syntax_or_import_breaker(r):
@@ -543,6 +604,18 @@ def decide(
         )
         if missing_note not in notes_list:
             notes_list.append(missing_note)
+
+    # Вторая сторона проверки (PROTOCOL §5.7): тесты обязаны принимать альтернативные
+    # корректные реализации. Если проверить это не удалось, кейс валиден, но доказано
+    # им меньше — и молчать об этом нельзя.
+    if has_mutant_runs and not alternatives_checked:
+        no_alt_note = (
+            "Проверка на альтернативное корректное решение не проводилась: вариант "
+            "не сгенерирован, не применился или сломал сборку. Тесты не доказали, что "
+            "проверяют поведение, а не конкретный дифф эталона"
+        )
+        if no_alt_note not in notes_list:
+            notes_list.append(no_alt_note)
 
     run_names = [r.name for r in runs]
     return Verdict(

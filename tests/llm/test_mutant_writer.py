@@ -19,6 +19,7 @@ from harness.llm.client import LlmClient, LlmResponse
 from harness.llm.mutant_writer import (
     _replacement_problem,
     _sanitize_name,
+    write_alternative_solutions,
     write_mutants,
 )
 
@@ -159,3 +160,71 @@ def test_write_mutants_repair_on_bad_json(sample_context: RepoContext, sample_dr
     assert mock_client.complete.call_count == 2
     assert mock_client.complete.call_args_list[1].kwargs["purpose"] == "mutants:repair"
 
+
+
+def test_write_alternative_solutions_marks_expected_reward(
+    sample_context: RepoContext, sample_draft: CaseDraft,
+) -> None:
+    """Альтернатива — тот же мутант-замена, но тесты обязаны её ПРИНЯТЬ."""
+    mock_client = MagicMock(spec=LlmClient)
+    payload = [
+        {
+            "name": "reordered-expression",
+            "description": "Тот же расчёт другим порядком операций",
+            "file_path": "NettingPolicy.py",
+            "anchor": "net = purchases - refunds",
+            "replacement": "net = -(refunds - purchases)",
+        },
+    ]
+    mock_client.complete.return_value = LlmResponse(
+        text=json.dumps(payload, ensure_ascii=False),
+        model="test",
+        input_tokens=500,
+        output_tokens=150,
+        duration_sec=1.0,
+    )
+
+    variants = write_alternative_solutions(
+        mock_client, sample_context, sample_draft, "oracle diff string",
+    )
+
+    assert len(variants) == 1
+    variant = variants[0]
+    assert variant.source == MutantSource.ALTERNATIVE_SOLUTION
+    assert variant.expected_reward == 1
+    # Префикс ставит харнесс, а не модель: по нему вердикт узнаёт обратное ожидание.
+    assert variant.name == "alt-solution-reordered-expression"
+    assert variant.is_replacement is True
+    assert mock_client.complete.call_args.kwargs["purpose"] == "alternatives"
+
+
+def test_write_alternative_solutions_drops_no_op_variant(
+    sample_context: RepoContext, sample_draft: CaseDraft,
+) -> None:
+    """Вариант, не отличающийся от эталона, ничего не доказывает и отбрасывается."""
+    mock_client = MagicMock(spec=LlmClient)
+    payload = [
+        {
+            "name": "same-code",
+            "file_path": "NettingPolicy.py",
+            "anchor": "net = purchases - refunds",
+            "replacement": "net = purchases - refunds",
+        },
+        {
+            "name": "escapes-repo",
+            "file_path": "../outside.py",
+            "anchor": "a",
+            "replacement": "b",
+        },
+    ]
+    mock_client.complete.return_value = LlmResponse(
+        text=json.dumps(payload, ensure_ascii=False),
+        model="test",
+        input_tokens=500,
+        output_tokens=150,
+        duration_sec=1.0,
+    )
+
+    assert write_alternative_solutions(
+        mock_client, sample_context, sample_draft, "oracle diff string",
+    ) == []

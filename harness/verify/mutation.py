@@ -137,11 +137,16 @@ def deduplicate_mutants(
     2. Повторяющиеся LLM-мутанты между собой (одинаковый file_path, anchor и replacement).
     3. Мутанты без изменений (anchor совпадает с replacement).
 
+    Альтернативные корректные решения (expected_reward=1) проверяются другой стороной
+    — тесты обязаны их принять, — поэтому правило 1 к ним не применяется: совпадение
+    с откатом эталона для них ничего не значит. Правила 2 и 3 применяются: вариант,
+    не отличающийся от эталона, не доказывает ничего.
+
     Возвращает (итоговый список мутантов, список сообщений об отброшенных).
     """
     kept_extra: list[Mutant] = []
     dropped_notes: list[str] = []
-    seen_extra: set[tuple[str, str, str]] = set()
+    seen_extra: set[tuple[str, str, str, int]] = set()
 
     # Собираем все инверсии эталона (hunk-revert)
     reverts_by_file: dict[str, list[tuple[str, str]]] = {}
@@ -165,16 +170,16 @@ def deduplicate_mutants(
             continue
 
         # 2. Дубликат другого LLM-мутанта
-        key = (norm_path, norm_anc, norm_rep)
+        key = (norm_path, norm_anc, norm_rep, m.expected_reward)
         if key in seen_extra:
             dropped_notes.append(
                 f"Мутант {m.name} отброшен: дублирует другого LLM-мутанта в {m.file_path}"
             )
             continue
 
-        # 3. Дубликат отката эталона (hunk-revert)
+        # 3. Дубликат отката эталона (hunk-revert). Для альтернативных решений не применяется.
         is_hunk_duplicate = False
-        if norm_path in reverts_by_file:
+        if m.expected_reward == 0 and norm_path in reverts_by_file:
             for h_anc, h_rep in reverts_by_file[norm_path]:
                 # Точное совпадение или взаимное включение
                 if (norm_anc == h_anc and norm_rep == h_rep) or \

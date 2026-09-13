@@ -84,6 +84,10 @@ def _execute_run(
                     "file_path": mutant.file_path,
                     "anchor": mutant.anchor,
                     "replacement": mutant.replacement,
+                    # Применение их не читает, но по уликам должно быть видно, чего от
+                    # прогона ждали: мутант обязан провалить тесты, альтернатива — пройти.
+                    "source": mutant.source.value,
+                    "expected_reward": mutant.expected_reward,
                 },
                 ensure_ascii=False,
             ),
@@ -429,7 +433,12 @@ def run_mutants(
     task_dir: Path, evidence_dir: Path, image: str, lists: TestLists, limits: Limits,
     mutants: list[Mutant], *, image_digest: str | None = None, runner: DockerRunner | None = None,
 ) -> list[RunResult]:
-    """Прогоняет каждого мутанта поверх oracle и проверяет, что reward равен 0 (мутант пойман)."""
+    """Прогоняет каждую замену поверх oracle и записывает результат.
+
+    Ожидание от reward задаёт не этот прогон, а Mutant.expected_reward: мутант-ошибка
+    обязан быть пойман (0), альтернативное корректное решение — принято (1). Сверяет их
+    verdict.decide, здесь разницы между ними нет.
+    """
     runner = runner or DockerRunner()
     runs: list[RunResult] = []
     all_ids = lists.all_ids()

@@ -28,7 +28,7 @@ from harness.llm.client import LlmClient
 from harness.llm.spec_writer import write_spec, write_instruction
 from harness.llm.test_writer import write_tests
 from harness.llm.solution_writer import write_solution
-from harness.llm.mutant_writer import write_mutants
+from harness.llm.mutant_writer import write_alternative_solutions, write_mutants
 from harness.llm.parsing import ParsingError
 from harness.llm.repair import repair
 from harness.build.manifest import ManifestError
@@ -137,9 +137,11 @@ def run(case: CaseInput) -> CaseResult:
             protected_files=protected_files,
         )
 
-        # 6.5. LLM-мутанты — генерируем один раз до цикла
+        # 6.5. LLM-мутанты и альтернативные решения — генерируем один раз до цикла
         llm_mutants = []
+        alt_solutions = []
         mutant_gen_note = None
+        alt_gen_note = None
         try:
             # Дифф эталонного решения существует только после применения solve.sh, а применяется
             # он в контейнере (verify.runs.run_apply_solution) — образа здесь ещё нет. Поэтому
@@ -159,12 +161,24 @@ def run(case: CaseInput) -> CaseResult:
                            exc_info=True)
             mutant_gen_note = f"Генерация независимых LLM-мутантов завершилась сбоем ({exc})"
 
+        # Вторая сторона проверки (PROTOCOL §5.7): тесты обязаны принимать корректное
+        # решение, написанное иначе. Сбой генерации кейс не валит — он уезжает в
+        # limitations, потому что непроведённая проверка не равна пройденной.
+        try:
+            if solution_text.strip():
+                alt_solutions = write_alternative_solutions(client, context, draft, solution_text)
+                LOGGER.info("Generated %d alternative solutions", len(alt_solutions))
+        except Exception as exc:
+            LOGGER.warning("Alternative solution generation failed, continuing without it",
+                           exc_info=True)
+            alt_gen_note = f"Генерация альтернативного корректного решения завершилась сбоем ({exc})"
+
 
         final_verdict = None
         verify_options = VerifyOptions(
             repeat=True,
             run_mutants=True,
-            extra_mutants=llm_mutants,
+            extra_mutants=[*llm_mutants, *alt_solutions],
         )
 
         for iteration in range(MAX_REPAIR_ITERATIONS + 1):
@@ -212,8 +226,9 @@ def run(case: CaseInput) -> CaseResult:
             # это ограничение кейса, о котором надо сказать, но не провал.
             limitations.extend(final_verdict.notes)
 
-        if mutant_gen_note and mutant_gen_note not in limitations:
-            limitations.append(mutant_gen_note)
+        for gen_note in (mutant_gen_note, alt_gen_note):
+            if gen_note and gen_note not in limitations:
+                limitations.append(gen_note)
 
         if final_verdict and final_verdict.ok:
             status = Status.READY

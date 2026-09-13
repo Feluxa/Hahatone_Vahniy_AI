@@ -361,3 +361,48 @@ def test_import_error_is_rejected_even_when_other_tests_ran(tmp_path: Path) -> N
 
     assert run.tests["tests/test_x.py::test_f2p"].exception_type == "ModuleNotFoundError"
     assert _is_syntax_or_import_breaker(run) is True
+
+
+def test_alternative_solution_survives_hunk_revert_dedup() -> None:
+    """Альтернативу нельзя отбрасывать по совпадению с откатом: у неё обратное ожидание."""
+    diff_text = """--- a/pkg/calc.py
++++ b/pkg/calc.py
+@@ -1,2 +1,2 @@
+-net = purchases + refunds
++net = purchases - refunds
+"""
+    hunks = hunk_revert_mutants(diff_text)
+    alternative = Mutant(
+        name="alt-solution-reordered",
+        source=MutantSource.ALTERNATIVE_SOLUTION,
+        description="Тот же расчёт другим порядком операций",
+        patch="",
+        file_path="pkg/calc.py",
+        anchor="net = purchases - refunds",
+        replacement="net = -(refunds - purchases)",
+        expected_reward=1,
+    )
+
+    kept, dropped = deduplicate_mutants(hunks, [alternative])
+
+    assert [m.name for m in kept] == ["hunk-1", "alt-solution-reordered"]
+    assert dropped == []
+
+
+def test_alternative_identical_to_reference_is_dropped() -> None:
+    """Вариант, не отличающийся от эталона, не доказывает ничего."""
+    alternative = Mutant(
+        name="alt-solution-noop",
+        source=MutantSource.ALTERNATIVE_SOLUTION,
+        description="Ничего не изменено",
+        patch="",
+        file_path="pkg/calc.py",
+        anchor="net = purchases - refunds",
+        replacement="   net = purchases - refunds   ",
+        expected_reward=1,
+    )
+
+    kept, dropped = deduplicate_mutants([], [alternative])
+
+    assert kept == []
+    assert len(dropped) == 1
