@@ -68,6 +68,43 @@ def _exception_type_from_message(message: str | None) -> str:
     return match.group(1) if match else "AssertionError"
 
 
+def _exception_type_from_error(message: str | None, text: str | None) -> str | None:
+    """Тип исключения для <error>: ошибка сбора, импорта или фикстуры.
+
+    pytest не пишет атрибут type ни у <failure>, ни у <error> — только у <skipped>
+    (см. _pytest/junitxml.py). У ошибки сбора message всегда буквально 'collection failure',
+    а само исключение лежит последней строкой трейсбека в теле элемента и помечено 'E ':
+
+        E     File ".../repo/module.py", line 1
+        E   SyntaxError: invalid syntax
+
+    Поэтому сообщение разбирается как у failure, а если в нём типа нет — берётся последнее
+    похожее на имя исключения совпадение из трейсбека (последнее, потому что при цепочке
+    исключений внизу стоит то, которое дошло до pytest).
+
+    В отличие от _exception_type_from_message, умолчания 'AssertionError' здесь нет:
+    ошибка сбора никогда не является провалом проверки, и выдавать её за assert нельзя.
+    """
+    if message:
+        match = EXCEPTION_PREFIX.match(message)
+        if match:
+            return match.group(1)
+
+    if not text:
+        return None
+
+    found: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        # Строки трейсбека pytest помечает 'E' с отступом; убираем маркер, если он есть.
+        if line.startswith("E ") or line == "E":
+            line = line[1:].strip()
+        match = EXCEPTION_PREFIX.match(line)
+        if match:
+            found = match.group(1)
+    return found
+
+
 def parse_junit(xml_path: Path) -> dict[str, TestReport]:
     """Разбирает JUnit XML от pytest в словарь test_id -> TestReport."""
     if not xml_path.exists():
@@ -113,7 +150,7 @@ def parse_junit(xml_path: Path) -> dict[str, TestReport]:
             reports[test_id] = TestReport(
                 outcome=TestOutcome.ERROR,
                 message=msg,
-                exception_type=exc_type,
+                exception_type=exc_type or _exception_type_from_error(msg, error_el.text),
             )
         elif skipped_el is not None:
             msg = skipped_el.get("message")

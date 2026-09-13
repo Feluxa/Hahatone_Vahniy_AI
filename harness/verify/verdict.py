@@ -170,32 +170,39 @@ SYNTAX_OR_IMPORT_ERRORS = {
 
 
 def _is_syntax_or_import_breaker(run: RunResult) -> bool:
-    """Проверяет, не вызвал ли мутант сбой синтаксиса или импорта вместо реальной проверки.
+    """Мутант не дошёл до проверок тестов: упали сборка, импорт или сбор pytest.
 
-    Если pytest не смог собрать тесты или все сбои — это SyntaxError/ImportError,
-    мутант считается синтаксически невалидным (PROTOCOL §5.4: ошибка импорта или
-    окружения не заменяет проверку дефекта).
+    reward 0 у такого прогона выставлен парсером или импортом, а не тестами, поэтому
+    засчитывать мутанта пойманным нельзя (PROTOCOL §5.4: ошибка импорта или окружения
+    не заменяет проверку дефекта).
+
+    Признака два, и нужны оба:
+
+    1. Структурный — ни один ожидаемый тест не дошёл до вердикта: нет ни PASSED, ни FAILED,
+       всё в ERROR, MISSING или SKIPPED. Это единственный признак, который работает при
+       сломанном сборе: pytest пишет туда <error message="collection failure"> без типа
+       исключения, а ожидаемые тесты становятся MISSING вообще без сообщения.
+    2. По типу исключения — среди ошибок есть SyntaxError, ImportError и подобные. Ловит
+       случай, когда часть тестов всё же отработала, а модуль репозитория не импортировался.
+
+    Только на второй признак полагаться нельзя: тип исключения у <error> восстанавливается
+    из текста трейсбека эвристикой (junit._exception_type_from_error) и может не найтись.
     """
     if not run.tests:
         return True
-    has_failed_test = any(rep.outcome == TestOutcome.FAILED for rep in run.tests.values())
-    if has_failed_test:
-        return False
-    all_errors = [
-        rep for rep in run.tests.values()
-        if rep.outcome in (TestOutcome.ERROR, TestOutcome.MISSING)
-    ]
-    if all_errors and all(
+
+    if any(
         (rep.exception_type or "") in SYNTAX_OR_IMPORT_ERRORS
-        for rep in all_errors
+        for rep in run.tests.values()
+        if rep.outcome in (TestOutcome.ERROR, TestOutcome.MISSING)
     ):
         return True
-    return False
 
+    outcomes = {rep.outcome for rep in run.tests.values()}
+    return not (outcomes & {TestOutcome.FAILED, TestOutcome.PASSED})
 
 
 def _check_executed(
-
     run: RunResult, problems: list[Problem], *, target: RepairTarget = RepairTarget.ENVIRONMENT,
 ) -> bool:
     """Невыполненный прогон никогда не считается успешным (PROTOCOL §2)."""

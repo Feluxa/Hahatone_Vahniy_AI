@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from harness.contracts import (
     Mutant,
     MutantSource,
@@ -8,8 +10,39 @@ from harness.contracts import (
     TestOutcome,
     TestReport,
 )
+from harness.verify.junit import parse_junit, with_missing
 from harness.verify.mutation import deduplicate_mutants, hunk_revert_mutants
-from harness.verify.verdict import decide
+from harness.verify.verdict import _is_syntax_or_import_breaker, decide
+
+
+def _lists() -> TestLists:
+    return TestLists(
+        fail_to_pass=["tests/test_x.py::test_f2p"],
+        pass_to_pass=["tests/test_x.py::test_p2p"],
+        anti_cheat=["tests/test_x.py::test_ac"],
+    )
+
+
+def _full_runs_ok() -> list[RunResult]:
+    """Пара base/oracle без замечаний: нужна, чтобы вердикт упирался только в мутанта."""
+    return [
+        RunResult(
+            name="base/full", kind=RunKind.BASE, scope=RunScope.FULL, executed=True,
+            commands=["sh", "/tests/test.sh"], image_digest="sha256:test", duration_sec=1.0,
+            exit_code=0, reward=0, report_path="base/full/verifier/tests.xml", log_dir="base/full",
+            tests={
+                "tests/test_x.py::test_f2p": TestReport(
+                    outcome=TestOutcome.FAILED, exception_type="AssertionError",
+                ),
+            },
+        ),
+        RunResult(
+            name="oracle/full", kind=RunKind.ORACLE, scope=RunScope.FULL, executed=True,
+            commands=["sh", "/tests/test.sh"], image_digest="sha256:test", duration_sec=1.0,
+            exit_code=0, reward=1, report_path="oracle/full/verifier/tests.xml", log_dir="oracle/full",
+            tests={"tests/test_x.py::test_f2p": TestReport(outcome=TestOutcome.PASSED)},
+        ),
+    ]
 
 
 
@@ -235,3 +268,96 @@ def test_verdict_notes_when_no_independent_mutants() -> None:
     assert verdict.ok is True, [p.details for p in verdict.problems]
     assert any("Мутационное тестирование проведено только на основе hunk-revert" in n for n in verdict.notes)
 
+
+
+# Настоящий вывод pytest 8.x при SyntaxError в модуле репозитория, который импортирует тест.
+# Важны ровно две детали, на которых ломалась прежняя проверка: у <error> нет атрибута type
+# (pytest пишет его только у <skipped>), а имя исключения стоит последней строкой трейсбека.
+COLLECTION_FAILURE_XML = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.135">
+<testcase classname="" name="tests.test_case" time="0.000"><error message="collection failure">\
+/usr/lib/python3.11/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_case.py:1: in &lt;module&gt;
+    import settlement
+E     File "/app/repo/settlement.py", line 12
+E       def compute(:
+E                   ^
+E   SyntaxError: invalid syntax</error></testcase></testsuite></testsuites>
+"""
+
+
+def _mutant_run_from_xml(tmp_path: Path, name: str, xml: str, expected_ids: list[str]) -> RunResult:
+    """Прогон мутанта, собранный из настоящего отчёта pytest, а не из TestReport руками."""
+    xml_path = tmp_path / f"{name}.xml"
+    xml_path.write_text(xml, encoding="utf-8")
+    return RunResult(
+        name=f"mutant/{name}",
+        kind=RunKind.MUTANT,
+        scope=RunScope.FULL,
+        executed=True,
+        commands=["sh", "/tests/test.sh"],
+        image_digest="sha256:test",
+        duration_sec=1.0,
+        exit_code=2,
+        reward=0,
+        report_path=str(xml_path),
+        log_dir=f"mutant/{name}",
+        tests=with_missing(parse_junit(xml_path), expected_ids),
+    )
+
+
+def test_collection_failure_is_rejected_as_breaker(tmp_path: Path) -> None:
+    """Мутант, сломавший сбор тестов, не засчитывается пойманным.
+
+    Проверка идёт через настоящий отчёт pytest: у <error> нет атрибута type, поэтому
+    отчёт, собранный руками с exception_type='SyntaxError', эту ветку не покрывает.
+    """
+    expected_ids = ["tests/test_x.py::test_f2p", "tests/test_x.py::test_p2p", "tests/test_x.py::test_ac"]
+    run = _mutant_run_from_xml(tmp_path, "llm-mutant-bad-syntax", COLLECTION_FAILURE_XML, expected_ids)
+
+    # Ни одного вердикта по тестам: всё либо ошибка сбора, либо ненайденный тест.
+    assert all(
+        rep.outcome in (TestOutcome.ERROR, TestOutcome.MISSING) for rep in run.tests.values()
+    )
+    assert _is_syntax_or_import_breaker(run) is True
+
+    verdict = decide(_full_runs_ok() + [run], _lists(), [])
+    assert any("отброшен: вызвал сбой импорта/синтаксиса" in note for note in verdict.notes)
+    assert any("только на основе hunk-revert" in note for note in verdict.notes)
+
+
+def test_mutant_caught_by_assertion_counts_as_independent(tmp_path: Path) -> None:
+    """Мутант, пойманный настоящим assert, остаётся независимым свидетельством."""
+    xml = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="0.2">
+<testcase classname="tests.test_x" name="test_f2p" file="tests/test_x.py" time="0.01">
+<failure message="assert Decimal('70') == Decimal('130')">assert 70 == 130</failure></testcase>
+<testcase classname="tests.test_x" name="test_p2p" file="tests/test_x.py" time="0.01" />
+<testcase classname="tests.test_x" name="test_ac" file="tests/test_x.py" time="0.01" />
+</testsuite></testsuites>
+"""
+    expected_ids = ["tests/test_x.py::test_f2p", "tests/test_x.py::test_p2p", "tests/test_x.py::test_ac"]
+    run = _mutant_run_from_xml(tmp_path, "llm-mutant-sign", xml, expected_ids)
+
+    assert _is_syntax_or_import_breaker(run) is False
+
+    verdict = decide(_full_runs_ok() + [run], _lists(), [])
+    assert not any("отброшен" in note for note in verdict.notes)
+    assert not any("только на основе hunk-revert" in note for note in verdict.notes)
+
+
+def test_import_error_is_rejected_even_when_other_tests_ran(tmp_path: Path) -> None:
+    """Часть тестов отработала, но модуль репозитория не импортировался — мутант не в счёт."""
+    xml = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="2" time="0.2">
+<testcase classname="tests.test_x" name="test_f2p" file="tests/test_x.py" time="0.01">
+<error message="collection failure">E   ModuleNotFoundError: No module named 'settlement'</error></testcase>
+<testcase classname="tests.test_x" name="test_p2p" file="tests/test_x.py" time="0.01" />
+</testsuite></testsuites>
+"""
+    expected_ids = ["tests/test_x.py::test_f2p", "tests/test_x.py::test_p2p", "tests/test_x.py::test_ac"]
+    run = _mutant_run_from_xml(tmp_path, "llm-mutant-drop-import", xml, expected_ids)
+
+    assert run.tests["tests/test_x.py::test_f2p"].exception_type == "ModuleNotFoundError"
+    assert _is_syntax_or_import_breaker(run) is True

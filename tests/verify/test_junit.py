@@ -145,3 +145,55 @@ def test_explicit_type_attribute_wins(tmp_path: Path) -> None:
     )
 
     assert reports["tests/test_x.py::test_x"].exception_type == "ValueError"
+
+
+def test_error_type_is_recovered_from_traceback() -> None:
+    """У <error> pytest не пишет атрибут type — имя исключения есть только в трейсбеке.
+
+    Без этого мутант или тест, упавший на сборе, приходил с exception_type=None и
+    выглядел как обычная ошибка прогона.
+    """
+    xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.1">
+<testcase classname="" name="tests.test_case" time="0.000"><error message="collection failure">\
+tests/test_case.py:1: in &lt;module&gt;
+    import settlement
+E     File "/app/repo/settlement.py", line 12
+E       def compute(:
+E   SyntaxError: invalid syntax</error></testcase></testsuite></testsuites>
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".xml", encoding="utf-8", delete=False) as f:
+        f.write(xml_content)
+        f_path = Path(f.name)
+
+    try:
+        reports = parse_junit(f_path)
+        assert len(reports) == 1
+        report = next(iter(reports.values()))
+        assert report.outcome == TestOutcome.ERROR
+        assert report.exception_type == "SyntaxError"
+        # Провалом проверки ошибка сбора не становится ни при каких условиях.
+        assert report.failed_by_assertion is False
+    finally:
+        f_path.unlink()
+
+
+def test_error_without_exception_name_keeps_none() -> None:
+    """Умолчания 'AssertionError' у <error> нет: сбой сбора не выдаётся за провал assert."""
+    xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.1">
+<testcase classname="tests.test_x" name="test_one" file="tests/test_x.py" time="0.0">
+<error message="collection failure">worker 'gw0' crashed while running test</error></testcase>
+</testsuite></testsuites>
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".xml", encoding="utf-8", delete=False) as f:
+        f.write(xml_content)
+        f_path = Path(f.name)
+
+    try:
+        reports = parse_junit(f_path)
+        report = reports["tests/test_x.py::test_one"]
+        assert report.outcome == TestOutcome.ERROR
+        assert report.exception_type is None
+    finally:
+        f_path.unlink()
