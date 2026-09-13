@@ -206,6 +206,76 @@ def _is_syntax_or_import_breaker(run: RunResult) -> bool:
     return not (outcomes & {TestOutcome.FAILED, TestOutcome.PASSED})
 
 
+def _failing_tests(run: RunResult) -> frozenset[str]:
+    """Множество тестов, которые прогон уронил. Это и есть наблюдаемый эффект мутанта."""
+    return frozenset(
+        test_id for test_id, report in run.tests.items()
+        if report.outcome in (TestOutcome.FAILED, TestOutcome.ERROR)
+    )
+
+
+def mutant_discards(runs: list[RunResult]) -> dict[str, dict[str, str]]:
+    """Мутанты, чей прогон ничего не доказывает: имя -> причина отбраковки.
+
+    Чистая функция без побочных эффектов: её зовёт и decide (чтобы не засчитать такой
+    мутант независимым свидетельством), и verify_case (чтобы записать отбраковку в
+    evidence). Проверки, которой нет в уликах, не существует.
+
+    Причины:
+    - not_applied — замена не наложилась или прогон не дошёл до конца, reward не записан;
+    - broken — мутант сломал сборку или импорт, reward 0 выставил парсер, а не тесты;
+    - duplicate_outcome — мутант роняет ровно то же множество тестов, что уже запущенный
+      до него. Совпадение исходов означает, что независимого сигнала он не добавил, даже
+      если текст замены другой: именно так LLM-мутант повторял откат эталона.
+    """
+    discards: dict[str, dict[str, str]] = {}
+    outcomes_seen: dict[frozenset[str], str] = {}
+
+    for run in runs:
+        if run.kind is not RunKind.MUTANT or run.name.startswith(ALT_SOLUTION_PREFIX):
+            continue
+
+        if not run.executed or run.reward is None:
+            discards[run.name] = {
+                "name": run.name, "stage": "run", "reason": "not_applied",
+                "details": (
+                    f"Мутант {run.name} не проверен: прогон не дошёл до тестов "
+                    f"(executed={run.executed}, exit_code={run.exit_code}, note={run.note})"
+                ),
+            }
+            continue
+
+        if run.reward != 0:
+            continue
+
+        if _is_syntax_or_import_breaker(run):
+            discards[run.name] = {
+                "name": run.name, "stage": "run", "reason": "broken",
+                "details": (
+                    f"Мутант {run.name} отброшен: вызвал сбой импорта или синтаксиса "
+                    f"вместо логической проверки"
+                ),
+            }
+            continue
+
+        failing = _failing_tests(run)
+        twin = outcomes_seen.get(failing)
+        if twin is not None:
+            discards[run.name] = {
+                "name": run.name, "stage": "run", "reason": "duplicate_outcome",
+                "details": (
+                    f"Мутант {run.name} отброшен: роняет ровно то же множество тестов, "
+                    f"что и {twin} ({', '.join(sorted(failing)) or 'ни одного'}), "
+                    f"независимого свидетельства не добавляет"
+                ),
+            }
+            continue
+
+        outcomes_seen[failing] = run.name
+
+    return discards
+
+
 def _check_alternative_solution(
     run: RunResult, problems: list[Problem], checked: list[str],
 ) -> None:
@@ -220,10 +290,23 @@ def _check_alternative_solution(
     а отсутствие проверки уезжает в limitations отдельной нотой.
     """
     if not run.executed or run.reward is None:
-        LOGGER.info(
-            "Альтернативное решение %s не проверено: прогон не дошёл до тестов (executed=%s, note=%s)",
-            run.name, run.executed, run.note,
+        # Запланированная проверка не состоялась. Молчать об этом нельзя: пустой
+        # limitations обязан означать «всё запланированное выполнено».
+        LOGGER.warning(
+            "Альтернативное решение %s не проверено: прогон не дошёл до тестов "
+            "(executed=%s, exit_code=%s, note=%s)",
+            run.name, run.executed, run.exit_code, run.note,
         )
+        problems.append(Problem(
+            category=ProblemCategory.INTERNAL,
+            target=RepairTarget.NONE,
+            details=(
+                f"Альтернативное корректное решение {run.name} не проверено: прогон не "
+                f"дошёл до тестов (executed={run.executed}, exit_code={run.exit_code}, "
+                f"note={run.note}). Проверка PROTOCOL §5.7 не выполнена"
+            ),
+            run_names=[run.name],
+        ))
         return
 
     if run.reward == 1:
@@ -231,10 +314,20 @@ def _check_alternative_solution(
         return
 
     if _is_syntax_or_import_breaker(run):
-        # Сломался сам вариант, а не тесты: отвергать нечего, проверка не состоялась.
+        # Сломался сам вариант, а не тесты: отвергать нечего, но и проверки не было.
         LOGGER.warning(
             "Альтернативное решение %s не проверено: вызвало сбой импорта/синтаксиса", run.name,
         )
+        problems.append(Problem(
+            category=ProblemCategory.INTERNAL,
+            target=RepairTarget.NONE,
+            details=(
+                f"Альтернативное корректное решение {run.name} не проверено: вызвало сбой "
+                f"импорта или синтаксиса вместо прогона тестов. Проверка PROTOCOL §5.7 "
+                f"не выполнена"
+            ),
+            run_names=[run.name],
+        ))
         return
 
     failed = sorted(
@@ -538,6 +631,7 @@ def decide(
     has_mutant_runs = False
     alternatives_checked: list[str] = []
     notes_list = list(notes or [])
+    discards = mutant_discards(runs)
 
     for r in runs:
         if r.kind != RunKind.MUTANT:
@@ -548,27 +642,24 @@ def decide(
             continue
 
         has_mutant_runs = True
-        if r.executed and r.reward == 0:
-            if _is_syntax_or_import_breaker(r):
-                if r.name.startswith(LLM_MUTANT_PREFIX):
-                    LOGGER.warning(
-                        "Мутант %s отброшен: вызвал синтаксическую ошибку или сбой импорта вместо логической проверки",
-                        r.name,
-                    )
-                    discard_msg = f"Мутант {r.name} отброшен: вызвал сбой импорта/синтаксиса"
-                    if discard_msg not in notes_list:
-                        notes_list.append(discard_msg)
-                else:
-                    problems.append(Problem(
-                        category=ProblemCategory.INTERNAL,
-                        target=RepairTarget.NONE,
-                        details=(
-                            f"Hunk-revert мутант {r.name} вызвал сбой синтаксиса/импорта вместо логической проверки"
-                        ),
-                        run_names=[r.name],
-                    ))
-                continue
+        discard = discards.get(r.name)
+        if discard is not None:
+            # Отбраковка обязана быть видна: и в логе, и в limitations, и в evidence
+            # (evidence/mutants_discarded.json пишет verify_case по той же функции).
+            LOGGER.warning("%s", discard["details"])
+            if discard["details"] not in notes_list:
+                notes_list.append(discard["details"])
+            if not r.name.startswith(LLM_MUTANT_PREFIX) and discard["reason"] != "duplicate_outcome":
+                # Hunk-revert строится из нашего же диффа: сломался — сломан дифф или solve.sh.
+                problems.append(Problem(
+                    category=ProblemCategory.INTERNAL,
+                    target=RepairTarget.NONE,
+                    details=f"Hunk-revert мутант {r.name} не проверен: {discard['details']}",
+                    run_names=[r.name],
+                ))
+            continue
 
+        if r.executed and r.reward == 0:
             if r.name.startswith(LLM_MUTANT_PREFIX):
                 valid_independent_mutants.append(r.name)
             continue
@@ -578,21 +669,6 @@ def decide(
                 category=ProblemCategory.MUTANT_SURVIVED,
                 target=RepairTarget.TESTS,
                 details=f"Mutant survived in {r.name}: tests gave reward=1",
-                run_names=[r.name],
-            ))
-        elif r.name.startswith(LLM_MUTANT_PREFIX):
-            # Невалидный патч от модели отбрасывается и не засчитывается (план §5.10).
-            LOGGER.info("Мутант %s не дал reward, патч считается невалидным и отброшен", r.name)
-        else:
-            # Hunk-revert строится из нашего же диффа: не применился — сломан дифф или solve.sh.
-            problems.append(Problem(
-                category=ProblemCategory.INTERNAL,
-                target=RepairTarget.NONE,
-                details=(
-                    f"Mutant {r.name} produced no reward "
-                    f"(executed={r.executed}, exit_code={r.exit_code}, note={r.note}): "
-                    f"патч не применился или test.sh не отработал, мутант не проверен"
-                ),
                 run_names=[r.name],
             ))
 

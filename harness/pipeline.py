@@ -261,9 +261,8 @@ def run(case: CaseInput) -> CaseResult:
             # о нём нельзя: по llm_usage.json ремонт всё равно виден, и необъявленный он
             # читается как сокрытие.
             limitations.append(
-                f"Кейс собран не с первой попытки: попыток {attempts_made}, "
-                f"итераций ремонта {len(repair_log)}; улики неудачных попыток — "
-                f"evidence/attempts/attempt-N/"
+                f"repair_iterations: {len(repair_log)} (попыток {attempts_made}); "
+                f"улики неудачных попыток — evidence/attempts/attempt-N/"
             )
             limitations.extend(repair_log)
 

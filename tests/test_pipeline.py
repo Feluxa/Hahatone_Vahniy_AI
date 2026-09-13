@@ -327,8 +327,8 @@ def test_repair_attempts_are_preserved_and_declared(
     # Временный каталог за собой не оставляем.
     assert not (case.output_dir / "evidence-attempts").exists()
 
+    assert any("repair_iterations: 1" in note for note in result.limitations)
     assert any("попыток 2" in note for note in result.limitations)
-    assert any("итераций ремонта 1" in note for note in result.limitations)
     assert any(
         "base_f2p_passed" in note and "tests" in note for note in result.limitations
     )

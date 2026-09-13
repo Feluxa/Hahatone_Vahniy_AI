@@ -3,6 +3,7 @@ from pathlib import Path
 from harness.contracts import (
     Mutant,
     MutantSource,
+    ProblemCategory,
     RunKind,
     RunResult,
     RunScope,
@@ -12,7 +13,7 @@ from harness.contracts import (
 )
 from harness.verify.junit import parse_junit, with_missing
 from harness.verify.mutation import deduplicate_mutants, hunk_revert_mutants
-from harness.verify.verdict import _is_syntax_or_import_breaker, decide
+from harness.verify.verdict import _is_syntax_or_import_breaker, decide, mutant_discards
 
 
 def _lists() -> TestLists:
@@ -103,8 +104,9 @@ def test_deduplicate_mutants_drops_hunk_revert_duplicate() -> None:
     assert "llm-mutant-boundary-inclusive" not in names
 
     assert len(dropped) == 1
-    assert "llm-mutant-boundary-inclusive" in dropped[0]
-    assert "hunk-revert" in dropped[0]
+    assert dropped[0]["name"] == "llm-mutant-boundary-inclusive"
+    assert dropped[0]["reason"] == "duplicate_hunk_revert"
+    assert "hunk-revert" in dropped[0]["details"]
 
 
 def test_deduplicate_mutants_drops_duplicate_llm_mutants() -> None:
@@ -132,7 +134,8 @@ def test_deduplicate_mutants_drops_duplicate_llm_mutants() -> None:
     assert len(result) == 1
     assert result[0].name == "llm-mutant-1"
     assert len(dropped) == 1
-    assert "llm-mutant-2" in dropped[0]
+    assert dropped[0]["name"] == "llm-mutant-2"
+    assert dropped[0]["reason"] == "duplicate_patch"
 
 
 def test_verdict_rejects_mutant_breaking_syntax() -> None:
@@ -195,7 +198,10 @@ def test_verdict_rejects_mutant_breaking_syntax() -> None:
     verdict = decide(full_runs + [syntax_broken_mutant_run], lists, [])
 
     # Мутант с синтаксической ошибкой отброшен, но поскольку независимых не осталось, есть note
-    assert any("Мутант mutant/llm-mutant-bad-syntax отброшен: вызвал сбой импорта/синтаксиса" in n for n in verdict.notes)
+    assert any(
+        "mutant/llm-mutant-bad-syntax отброшен: вызвал сбой импорта или синтаксиса" in n
+        for n in verdict.notes
+    )
     assert any("Мутационное тестирование проведено только на основе hunk-revert" in n for n in verdict.notes)
 
 
@@ -323,7 +329,9 @@ def test_collection_failure_is_rejected_as_breaker(tmp_path: Path) -> None:
     assert _is_syntax_or_import_breaker(run) is True
 
     verdict = decide(_full_runs_ok() + [run], _lists(), [])
-    assert any("отброшен: вызвал сбой импорта/синтаксиса" in note for note in verdict.notes)
+    assert any(
+        "отброшен: вызвал сбой импорта или синтаксиса" in note for note in verdict.notes
+    )
     assert any("только на основе hunk-revert" in note for note in verdict.notes)
 
 
@@ -406,3 +414,69 @@ def test_alternative_identical_to_reference_is_dropped() -> None:
 
     assert kept == []
     assert len(dropped) == 1
+
+
+def _mutant_run_with_failures(name: str, failing: list[str], passing: list[str]) -> RunResult:
+    tests = {
+        **{t: TestReport(outcome=TestOutcome.FAILED, exception_type="AssertionError") for t in failing},
+        **{t: TestReport(outcome=TestOutcome.PASSED) for t in passing},
+    }
+    return RunResult(
+        name=name, kind=RunKind.MUTANT, scope=RunScope.FULL, executed=True,
+        commands=["sh", "/tests/test.sh"], image_digest="sha256:test", duration_sec=1.0,
+        exit_code=0, reward=0, report_path=f"{name}/verifier/tests.xml", log_dir=name,
+        tests=tests,
+    )
+
+
+def test_mutant_with_identical_outcome_is_not_independent_evidence() -> None:
+    """Дедупликация по исходам: тот же набор упавших тестов — то же свидетельство.
+
+    Текст замены при этом может отличаться: именно так LLM-мутант повторял откат
+    эталона и проходил дедупликацию по патчу.
+    """
+    f2p = "tests/test_x.py::test_f2p"
+    p2p = "tests/test_x.py::test_p2p"
+    hunk = _mutant_run_with_failures("mutant/hunk-2", [f2p], [p2p])
+    twin = _mutant_run_with_failures("mutant/llm-mutant-boundary", [f2p], [p2p])
+
+    discards = mutant_discards([hunk, twin])
+    assert set(discards) == {"mutant/llm-mutant-boundary"}
+    assert discards["mutant/llm-mutant-boundary"]["reason"] == "duplicate_outcome"
+    assert "mutant/hunk-2" in discards["mutant/llm-mutant-boundary"]["details"]
+
+    verdict = decide([*_full_runs_ok(), hunk, twin], _lists(), [])
+    # Независимых мутантов не осталось — и об этом сказано, а не умолчано.
+    assert any("роняет ровно то же множество тестов" in note for note in verdict.notes)
+    assert any("только на основе hunk-revert" in note for note in verdict.notes)
+    # Дубль сам по себе кейс не валит: это ограничение силы проверки, а не поломка.
+    assert not any(p.category == ProblemCategory.INTERNAL for p in verdict.problems)
+
+
+def test_mutant_with_different_outcome_stays_independent() -> None:
+    """Мутант, роняющий другой тест, остаётся независимым свидетельством."""
+    f2p = "tests/test_x.py::test_f2p"
+    p2p = "tests/test_x.py::test_p2p"
+    hunk = _mutant_run_with_failures("mutant/hunk-2", [f2p], [p2p])
+    other = _mutant_run_with_failures("mutant/llm-mutant-status-filter", [p2p], [f2p])
+
+    assert mutant_discards([hunk, other]) == {}
+
+    verdict = decide([*_full_runs_ok(), hunk, other], _lists(), [])
+    assert not any("только на основе hunk-revert" in note for note in verdict.notes)
+
+
+def test_mutant_that_did_not_apply_is_discarded_with_reason() -> None:
+    """Мутант, не дошедший до тестов, отбраковывается с причиной, а не считается пойманным."""
+    broken = RunResult(
+        name="mutant/llm-mutant-bad-anchor", kind=RunKind.MUTANT, scope=RunScope.FULL,
+        executed=False, commands=["sh", "/tests/test.sh"], image_digest="sha256:test",
+        duration_sec=1.0, exit_code=1, reward=None, report_path=None,
+        log_dir="mutant/llm-mutant-bad-anchor", tests={},
+        note="контейнер завершился с кодом 1: anchor occurs 0 times",
+    )
+
+    discards = mutant_discards([broken])
+
+    assert discards["mutant/llm-mutant-bad-anchor"]["reason"] == "not_applied"
+    assert "anchor occurs 0 times" in discards["mutant/llm-mutant-bad-anchor"]["details"]

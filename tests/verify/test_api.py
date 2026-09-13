@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.contracts import Limits, ProblemCategory
+from harness.contracts import Limits, Mutant, MutantSource, ProblemCategory
 from harness.verify import api
 from harness.verify.docker import BuildOutcome, ContainerOutcome
 
@@ -139,3 +139,36 @@ def test_verify_case_skips_apply_run_without_mutants(
     )
 
     assert not any(r.name == "oracle/apply" for r in runs)
+
+
+def test_discarded_mutants_reach_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Мутант, отброшенный на генерации, прогона не порождает — но улику обязан оставить.
+
+    По одному summary.json такая отбраковка не видна вообще: прогона нет, а значит нет и
+    строки в runs. Проверки, которой нет в evidence, не существует.
+    """
+    monkeypatch.setattr(api, "DockerRunner", _FakeRunner)
+    task_dir = _write_task_dir(tmp_path, instruction="Ничего лишнего.")
+    evidence_dir = tmp_path / "evidence"
+    no_op = Mutant(
+        name="llm-mutant-noop", source=MutantSource.LLM, description="замена тождественна",
+        patch="", file_path="app.py", anchor="value = 1", replacement="value = 1",
+    )
+
+    runs, verdict = api.verify_case(
+        task_dir, evidence_dir, LIMITS, api.VerifyOptions(extra_mutants=[no_op]),
+    )
+
+    discarded = json.loads(
+        (evidence_dir / "mutants_discarded.json").read_text(encoding="utf-8"),
+    )["discarded"]
+    record = next(d for d in discarded if d["name"] == "llm-mutant-noop")
+    assert record["stage"] == "generation"
+    assert record["reason"] == "empty_replacement"
+    # Отбраковка видна и в вердикте, а значит доедет до limitations.
+    assert any("llm-mutant-noop" in note for note in verdict.notes)
+    # Прогона у неё нет — и его никто не выдумывает.
+    assert not any(r.name == "mutant/llm-mutant-noop" for r in runs)
+
+    summary = json.loads((evidence_dir / "summary.json").read_text(encoding="utf-8"))
+    assert [r["name"] for r in summary["runs"]] == [r.name for r in runs]

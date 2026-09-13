@@ -138,7 +138,20 @@ def _execute_run(
             reports = with_missing(reports, expected_ids)
         report_rel = f"{name}/verifier/tests.xml"
 
-    executed = not outcome.timed_out and outcome.exit_code is not None
+    # Выполненным считается только прогон, дошедший до конца с нулевым кодом возврата
+    # (PROTOCOL §2). Прежнее «не таймаут и код возврата известен» помечало выполненным
+    # прогон, который упал на применении замены и не запустил ни одного теста.
+    executed = not outcome.timed_out and outcome.exit_code == 0
+
+    if outcome.timed_out:
+        note = "Timeout expired"
+    elif outcome.exit_code != 0:
+        # Причина обязана быть в уликах: по note=None нельзя отличить сбой применения
+        # замены от сломанного окружения.
+        reason = _log_tail(outcome.stderr_path) or _log_tail(outcome.stdout_path) or "вывод пуст"
+        note = f"контейнер завершился с кодом {outcome.exit_code}: {reason}"
+    else:
+        note = None
 
     return RunResult(
         name=name,
@@ -154,7 +167,7 @@ def _execute_run(
         log_dir=name,
         tests=reports,
         repeat_of=repeat_of,
-        note="Timeout expired" if outcome.timed_out else None,
+        note=note,
     )
 
 

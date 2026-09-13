@@ -379,3 +379,43 @@ def test_collect_note_is_empty_on_success(tmp_path: Path) -> None:
 
     assert run.executed is True
     assert run.note is None
+
+
+def test_nonzero_exit_is_not_executed_and_note_carries_the_reason(tmp_path: Path) -> None:
+    """Прогон, упавший на применении замены, не выполнен, и причина лежит в улике.
+
+    Прежде executed считался как «не таймаут и код возврата известен», поэтому прогон,
+    не запустивший ни одного теста, приезжал в summary.json помеченным выполненным,
+    а note оставался None — по уликам такой сбой был неотличим от успеха.
+    """
+    mutant = Mutant(
+        name="alt-solution-reordered", source=MutantSource.ALTERNATIVE_SOLUTION,
+        description="эквивалентная запись", patch="",
+        file_path="backend/NettingPolicy.py",
+        anchor="net = purchases - refunds",
+        replacement="delta = -refunds\nnet = purchases + delta",
+        expected_reward=1,
+    )
+
+    run = _run_one_mutant(tmp_path, mutant, _Runner(exit_code=1))
+
+    assert run.exit_code == 1
+    assert run.executed is False
+    assert run.note is not None
+    assert "1" in run.note
+    assert "sed: can't read" in run.note
+
+
+def test_successful_run_keeps_note_empty(tmp_path: Path) -> None:
+    """Нулевой код возврата — прогон выполнен, и note не засоряется."""
+    mutant = Mutant(
+        name="llm-mutant-sign", source=MutantSource.LLM, description="знак", patch="",
+        file_path="backend/NettingPolicy.py",
+        anchor="net = purchases - refunds",
+        replacement="net = purchases + refunds",
+    )
+
+    run = _run_one_mutant(tmp_path, mutant, _Runner(exit_code=0))
+
+    assert run.executed is True
+    assert run.note is None

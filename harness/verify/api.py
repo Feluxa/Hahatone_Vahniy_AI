@@ -6,7 +6,7 @@ from pathlib import Path
 
 from harness.contracts import Limits, Mutant, Problem, RunKind, RunResult, RunScope, TestLists, Verdict
 from harness.build.manifest import rewrite_test_lists
-from harness.evidence.summary import write_summary
+from harness.evidence.summary import write_mutant_discards, write_summary
 from harness.verify.docker import DockerRunner
 from harness.verify.mutation import deduplicate_mutants, hunk_revert_mutants, oracle_diff
 from harness.verify.runs import (
@@ -18,7 +18,7 @@ from harness.verify.runs import (
     run_repeats,
 )
 from harness.verify.static_checks import check_task_folder
-from harness.verify.verdict import decide, reclassify_by_outcomes
+from harness.verify.verdict import decide, mutant_discards, reclassify_by_outcomes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -161,19 +161,21 @@ def verify_case(
     # 4. Мутанты
     mutant_runs: list[RunResult] = []
     apply_runs: list[RunResult] = []
+    discarded_mutants: list[dict[str, str]] = []
     if options.run_mutants:
         hunk_mutants, apply_run = _compute_hunk_mutants(
             task_dir, evidence_dir, image_tag, limits,
             image_digest=build_outcome.image_digest, runner=runner,
         )
         apply_runs = [apply_run]
-        all_mutants, dropped_notes = deduplicate_mutants(hunk_mutants, options.extra_mutants)
-        if dropped_notes:
-            for d_note in dropped_notes:
-                LOGGER.info("%s", d_note)
+        all_mutants, dropped = deduplicate_mutants(hunk_mutants, options.extra_mutants)
+        discarded_mutants.extend(dropped)
+        if dropped:
+            for record in dropped:
+                LOGGER.info("%s", record["details"])
             if notes is None:
                 notes = []
-            notes.extend(dropped_notes)
+            notes.extend(record["details"] for record in dropped)
 
         if all_mutants:
             mutant_runs = run_mutants(
@@ -197,8 +199,13 @@ def verify_case(
     all_runs = [build_run, collect_run, *base_oracle_runs, *apply_runs, *mutant_runs]
     verdict = decide(all_runs, lists, static_problems, notes=notes)
 
-    # 6. Запись summary.json
+    # 6. Запись summary.json и отбраковки мутантов. Мутант, отброшенный на генерации,
+    # прогона не порождает, а отброшенный по исходам — порождает бесполезный: ни того,
+    # ни другого по одному summary.json не видно.
     write_summary(evidence_dir, all_runs, verdict)
+    if options.run_mutants:
+        discarded_mutants.extend(mutant_discards(all_runs).values())
+        write_mutant_discards(evidence_dir, discarded_mutants)
 
     # 7. Очистка образа
     if not options.keep_image:

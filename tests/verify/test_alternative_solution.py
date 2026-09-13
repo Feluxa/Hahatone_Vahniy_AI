@@ -109,29 +109,50 @@ def test_rejected_alternative_blames_tests() -> None:
 
 
 def test_alternative_that_broke_the_build_is_not_blamed_on_tests(tmp_path: Path) -> None:
-    """Сломался сам вариант — тесты ни при чём, но проверка не состоялась."""
+    """Сломался сам вариант — тесты ни при чём, но и проверки не было: это проблема."""
     xml_path = tmp_path / "alt.xml"
     xml_path.write_text(COLLECTION_FAILURE_XML, encoding="utf-8")
     alt = _alt_run(0, with_missing(parse_junit(xml_path), [F2P, P2P, AC]))
 
     verdict = decide([*_base_and_oracle(), _passing_mutant(), alt], _lists(), [])
 
+    # Тесты не виноваты: их никто не отверг.
     assert not any(
         p.category == ProblemCategory.ALTERNATIVE_SOLUTION_FAILED for p in verdict.problems
     )
+    # Но запланированная проверка не выполнена, и это не INFO в лог, а проблема.
+    internal = [p for p in verdict.problems if p.category == ProblemCategory.INTERNAL]
+    assert len(internal) == 1
+    assert internal[0].target == RepairTarget.NONE
+    assert "не проверено" in internal[0].details
     assert any("альтернативное корректное решение не проводилась" in n.lower()
                for n in verdict.notes)
 
 
-def test_alternative_that_did_not_apply_is_not_blamed_on_tests() -> None:
-    """Патч не наложился: вариант не проверен, кейс в этом не виноват."""
+def test_alternative_that_did_not_apply_is_a_problem() -> None:
+    """Патч не наложился: тесты не виноваты, но проверка не состоялась — это проблема.
+
+    Молчаливый INFO в лог означал бы «всё выполнившееся прошло»; пустой limitations
+    обязан означать «всё запланированное выполнено».
+    """
     alt = _alt_run(None, {}, executed=False)
+    alt = RunResult(
+        name=alt.name, kind=alt.kind, scope=alt.scope, executed=False,
+        commands=alt.commands, image_digest=alt.image_digest, duration_sec=alt.duration_sec,
+        exit_code=1, reward=None, report_path=alt.report_path, log_dir=alt.log_dir,
+        tests={}, note="контейнер завершился с кодом 1: anchor occurs 0 times",
+    )
 
     verdict = decide([*_base_and_oracle(), _passing_mutant(), alt], _lists(), [])
 
     assert not any(
         p.category == ProblemCategory.ALTERNATIVE_SOLUTION_FAILED for p in verdict.problems
     )
+    internal = [p for p in verdict.problems if p.category == ProblemCategory.INTERNAL]
+    assert len(internal) == 1
+    assert internal[0].target == RepairTarget.NONE
+    assert "anchor occurs 0 times" in internal[0].details
+    assert internal[0].run_names == ["mutant/alt-solution-reordered"]
     assert any("альтернативное корректное решение не проводилась" in n.lower()
                for n in verdict.notes)
 

@@ -19,3 +19,19 @@ def write_summary(evidence_dir: Path, runs: list[RunResult], verdict: Verdict | 
     summary_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return summary_path
 
+
+
+def write_mutant_discards(evidence_dir: Path, discards: list[dict[str, str]]) -> Path:
+    """Записывает evidence/mutants_discarded.json — мутанты, не давшие свидетельства.
+
+    Сверх PROTOCOL.md. Проверка, отброшенная молча, неотличима от проверки, которая
+    прошла: по summary.json видно только запущенные прогоны, а отброшенный на генерации
+    мутант прогона не порождает вовсе.
+    """
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    path = evidence_dir / "mutants_discarded.json"
+    path.write_text(
+        json.dumps({"discarded": discards}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path

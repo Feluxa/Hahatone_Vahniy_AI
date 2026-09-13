@@ -42,3 +42,24 @@ def test_write_summary_creates_valid_json() -> None:
         deserialized_run = from_dict(RunResult, data["runs"][0])
         assert deserialized_run.name == "base/full"
         assert deserialized_run.reward == 0
+
+
+def test_write_mutant_discards_records_reason(tmp_path: Path) -> None:
+    """Отброшенный мутант виден в уликах: проверки, которой нет в evidence, не существует."""
+    from harness.evidence.summary import write_mutant_discards
+
+    path = write_mutant_discards(tmp_path / "evidence", [
+        {
+            "name": "llm-mutant-x", "source": "llm", "stage": "generation",
+            "reason": "duplicate_hunk_revert", "details": "дублирует откат эталона",
+        },
+        {
+            "name": "mutant/llm-mutant-y", "stage": "run",
+            "reason": "duplicate_outcome", "details": "роняет те же тесты, что mutant/hunk-1",
+        },
+    ])
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert path.name == "mutants_discarded.json"
+    assert [d["reason"] for d in data["discarded"]] == ["duplicate_hunk_revert", "duplicate_outcome"]
+    assert data["discarded"][1]["name"] == "mutant/llm-mutant-y"

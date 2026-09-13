@@ -122,6 +122,17 @@ def hunk_revert_mutants(diff: str) -> list[Mutant]:
     return mutants
 
 
+def _discard(mutant: Mutant, reason: str, details: str) -> dict[str, str]:
+    """Запись об отброшенном мутанте для evidence/mutants_discarded.json."""
+    return {
+        "name": mutant.name,
+        "source": mutant.source.value,
+        "stage": "generation",
+        "reason": reason,
+        "details": details,
+    }
+
+
 def normalize_snippet(s: str) -> str:
     """Нормализует фрагмент кода: убирает пробелы в начале/конце строк и пустые строки."""
     return "\n".join(line.strip() for line in s.splitlines() if line.strip())
@@ -129,7 +140,7 @@ def normalize_snippet(s: str) -> str:
 
 def deduplicate_mutants(
     hunk_mutants: list[Mutant], extra_mutants: list[Mutant]
-) -> tuple[list[Mutant], list[str]]:
+) -> tuple[list[Mutant], list[dict[str, str]]]:
     """Отсекает дубликаты мутантов:
 
     1. Мутанты, дублирующие откат эталона (hunk-revert): если LLM-мутант меняет
@@ -142,10 +153,12 @@ def deduplicate_mutants(
     с откатом эталона для них ничего не значит. Правила 2 и 3 применяются: вариант,
     не отличающийся от эталона, не доказывает ничего.
 
-    Возвращает (итоговый список мутантов, список сообщений об отброшенных).
+    Возвращает (итоговый список мутантов, записи об отброшенных). Запись — словарь
+    с ключами name / stage / reason / details: она уезжает в evidence как есть, потому
+    что отброшенная проверка должна быть видна в уликах, а не только в логе.
     """
     kept_extra: list[Mutant] = []
-    dropped_notes: list[str] = []
+    dropped: list[dict[str, str]] = []
     seen_extra: set[tuple[str, str, str, int]] = set()
 
     # Собираем все инверсии эталона (hunk-revert)
@@ -164,17 +177,19 @@ def deduplicate_mutants(
 
         # 1. Пустая мутация
         if not norm_anc or not norm_rep or norm_anc == norm_rep:
-            dropped_notes.append(
-                f"Мутант {m.name} отброшен: пустой anchor/replacement или замена тождественна"
-            )
+            dropped.append(_discard(
+                m, "empty_replacement",
+                f"Мутант {m.name} отброшен: пустой anchor/replacement или замена тождественна",
+            ))
             continue
 
         # 2. Дубликат другого LLM-мутанта
         key = (norm_path, norm_anc, norm_rep, m.expected_reward)
         if key in seen_extra:
-            dropped_notes.append(
-                f"Мутант {m.name} отброшен: дублирует другого LLM-мутанта в {m.file_path}"
-            )
+            dropped.append(_discard(
+                m, "duplicate_patch",
+                f"Мутант {m.name} отброшен: дублирует другого LLM-мутанта в {m.file_path}",
+            ))
             continue
 
         # 3. Дубликат отката эталона (hunk-revert). Для альтернативных решений не применяется.
@@ -189,14 +204,16 @@ def deduplicate_mutants(
                     break
 
         if is_hunk_duplicate:
-            dropped_notes.append(
-                f"Мутант {m.name} отброшен: дублирует откат эталонного решения (hunk-revert) в {m.file_path}"
-            )
+            dropped.append(_discard(
+                m, "duplicate_hunk_revert",
+                f"Мутант {m.name} отброшен: дублирует откат эталонного решения "
+                f"(hunk-revert) в {m.file_path}",
+            ))
             continue
 
         seen_extra.add(key)
         kept_extra.append(m)
 
-    return [*hunk_mutants, *kept_extra], dropped_notes
+    return [*hunk_mutants, *kept_extra], dropped
 
 
