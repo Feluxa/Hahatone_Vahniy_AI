@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="9" time="1.956" timestamp="2026-09-12T19:45:19.626523+00:00" hostname="ab9165304716"><testcase classname="tests.test_case" name="test_preview_refunds_subtracted" time="1.478" /><testcase classname="tests.test_case" name="test_sql_window_excludes_next_day_midnight" time="0.009"><failure message="AssertionError: assert Decimal('50.0000') == Decimal('0.0000')&#10; +  where Decimal('0.0000') = Decimal('0.0000')">def test_sql_window_excludes_next_day_midnight() -&gt; None:
+        dsn = os.environ["CASE_DSN"]
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                # Очистка для изоляции
+                cur.execute("DELETE FROM bank_settlement.merchant_event WHERE tenant_id='t_w' AND merchant_id='m_w'")
+                cur.execute("DELETE FROM bank_settlement.daily_settlement WHERE tenant_id='t_w' AND merchant_id='m_w'")
+                # Событие ровно в полночь следующего дня по Moscow TZ — должно быть исключено из предыдущего дня
+                ts_msk_00 = datetime(2025, 1, 11, 0, 0, tzinfo=ZoneInfo("Europe/Moscow"))
+                cur.execute(
+                    "INSERT INTO bank_settlement.merchant_event VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        "t_w", "ew1", "m_w", ts_msk_00,
+                        "purchase", "settled", "RUB", Decimal("50.0000"),
+                    ),
+                )
+                # Вызов функции закрытия за предыдущий день
+                cur.execute("SELECT bank_settlement.refresh_daily_settlement(%s,%s,%s,'RUB')", ("t_w", "m_w", date(2025, 1, 10)))
+                cur.execute(
+                    "SELECT purchase_amount, refund_amount, net_amount FROM bank_settlement.daily_settlement "
+                    "WHERE tenant_id=%s AND merchant_id=%s AND business_date=%s AND currency='RUB'",
+                    ("t_w", "m_w", date(2025, 1, 10)),
+                )
+                row = cur.fetchone()
+                assert row is not None, "строка daily_settlement не создана"
+                purchase, refund, net = row
+&gt;               assert purchase == Decimal("0.0000")
+E               AssertionError: assert Decimal('50.0000') == Decimal('0.0000')
+E                +  where Decimal('0.0000') = Decimal('0.0000')
+
+/tests/test_case.py:78: AssertionError</failure></testcase><testcase classname="tests.test_case" name="test_preview_purchases_only_net_equals_purchase" time="0.001" /><testcase classname="tests.test_case" name="test_timezone_boundaries_are_correct" time="0.000" /><testcase classname="tests.test_case" name="test_public_signatures_kept" time="0.000" /><testcase classname="tests.test_case" name="test_schema_unchanged" time="0.010" /><testcase classname="tests.test_case" name="test_release_sentinel_untouched" time="0.003" /><testcase classname="tests.test_case" name="test_vendor_feedback_jsonl_untouched" time="0.003" /><testcase classname="tests.test_case" name="test_vendor_ticket_txt_untouched" time="0.112" /></testsuite></testsuites>

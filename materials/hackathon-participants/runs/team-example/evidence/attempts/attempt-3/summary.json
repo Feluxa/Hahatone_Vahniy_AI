@@ -1,0 +1,720 @@
+{
+  "runs": [
+    {
+      "name": "build",
+      "kind": "build",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "docker build -t case-verifier:task ."
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 5.572,
+      "exit_code": 0,
+      "reward": null,
+      "report_path": null,
+      "log_dir": null,
+      "tests": {},
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "collect",
+      "kind": "base",
+      "scope": "collect",
+      "executed": true,
+      "commands": [
+        "python -m pytest --rootdir=/ /tests --collect-only -q"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 1.765,
+      "exit_code": 0,
+      "reward": null,
+      "report_path": null,
+      "log_dir": "collect",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.262,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "base/full/verifier/tests.xml",
+      "log_dir": "base/full",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.322,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "oracle/full/verifier/tests.xml",
+      "log_dir": "oracle/full",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/fail_to_pass",
+      "kind": "base",
+      "scope": "fail_to_pass",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh /tests/test_case.py::test_fail_preview_refund_sign_mismatch"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.009,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "base/fail_to_pass/verifier/tests.xml",
+      "log_dir": "base/fail_to_pass",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/pass_to_pass",
+      "kind": "base",
+      "scope": "pass_to_pass",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh /tests/test_case.py::test_pass_preview_filters_and_boundaries"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 2.958,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "base/pass_to_pass/verifier/tests.xml",
+      "log_dir": "base/pass_to_pass",
+      "tests": {
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/anti_cheat",
+      "kind": "base",
+      "scope": "anti_cheat",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh /tests/test_case.py::test_schema_unchanged /tests/test_case.py::test_public_signatures_kept /tests/test_case.py::test_release_sentinel_untouched /tests/test_case.py::test_archive_export_is_still_required"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 2.973,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "base/anti_cheat/verifier/tests.xml",
+      "log_dir": "base/anti_cheat",
+      "tests": {
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/fail_to_pass",
+      "kind": "oracle",
+      "scope": "fail_to_pass",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh /tests/test_case.py::test_fail_preview_refund_sign_mismatch"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.234,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "oracle/fail_to_pass/verifier/tests.xml",
+      "log_dir": "oracle/fail_to_pass",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/pass_to_pass",
+      "kind": "oracle",
+      "scope": "pass_to_pass",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh /tests/test_case.py::test_pass_preview_filters_and_boundaries"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 2.975,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "oracle/pass_to_pass/verifier/tests.xml",
+      "log_dir": "oracle/pass_to_pass",
+      "tests": {
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/anti_cheat",
+      "kind": "oracle",
+      "scope": "anti_cheat",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh /tests/test_case.py::test_schema_unchanged /tests/test_case.py::test_public_signatures_kept /tests/test_case.py::test_release_sentinel_untouched /tests/test_case.py::test_archive_export_is_still_required"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.1,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/anti_cheat/verifier/tests.xml",
+      "log_dir": "oracle/anti_cheat",
+      "tests": {
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "repeat/base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.306,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "repeat/base/full/verifier/tests.xml",
+      "log_dir": "repeat/base/full",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": "base/full",
+      "note": null
+    },
+    {
+      "name": "repeat/oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.327,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "repeat/oracle/full/verifier/tests.xml",
+      "log_dir": "repeat/oracle/full",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": "oracle/full",
+      "note": null
+    },
+    {
+      "name": "oracle/apply",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && cp -a /app/repo/. /out/"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 1.914,
+      "exit_code": 0,
+      "reward": null,
+      "report_path": null,
+      "log_dir": "oracle/apply",
+      "tests": {},
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-1",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && python /logs/apply_mutant.py && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.347,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/hunk-1/verifier/tests.xml",
+      "log_dir": "mutant/hunk-1",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-2",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && python /logs/apply_mutant.py && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.455,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/hunk-2/verifier/tests.xml",
+      "log_dir": "mutant/hunk-2",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/llm-mutant-inverted-boundary-condition",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && python /logs/apply_mutant.py && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.42,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/llm-mutant-inverted-boundary-condition/verifier/tests.xml",
+      "log_dir": "mutant/llm-mutant-inverted-boundary-condition",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/llm-mutant-status-filter-skip",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && python /logs/apply_mutant.py && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 3.363,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/llm-mutant-status-filter-skip/verifier/tests.xml",
+      "log_dir": "mutant/llm-mutant-status-filter-skip",
+      "tests": {
+        "tests/test_case.py::test_fail_preview_refund_sign_mismatch": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_pass_preview_filters_and_boundaries": {
+          "outcome": "failed",
+          "message": "NameError: name 'DockerContainer' is not defined",
+          "exception_type": "NameError"
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_archive_export_is_still_required": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/alt-solution-reordered-expression",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && python /logs/apply_mutant.py && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:7578477359c32d855f2827b0c187065f47030d25e9089669708b35738dcea4c8",
+      "duration_sec": 0.545,
+      "exit_code": 1,
+      "reward": null,
+      "report_path": null,
+      "log_dir": "mutant/alt-solution-reordered-expression",
+      "tests": {},
+      "repeat_of": null,
+      "note": null
+    }
+  ],
+  "verdict": {
+    "ok": false,
+    "problems": [
+      {
+        "category": "test_invalid",
+        "target": "tests",
+        "details": "Тест tests/test_case.py::test_fail_preview_refund_sign_mismatch падает одинаково на исходном коде и на эталоне: NameError: NameError: name 'DockerContainer' is not defined. Продукт тут ни при чём — невалиден сам тест (неверные входные данные, несуществующее поле или недопустимое значение). Исправь тест, не решение.",
+        "test_ids": [
+          "tests/test_case.py::test_fail_preview_refund_sign_mismatch"
+        ],
+        "run_names": []
+      },
+      {
+        "category": "test_invalid",
+        "target": "tests",
+        "details": "Тест tests/test_case.py::test_pass_preview_filters_and_boundaries падает одинаково на исходном коде и на эталоне: NameError: NameError: name 'DockerContainer' is not defined. Продукт тут ни при чём — невалиден сам тест (неверные входные данные, несуществующее поле или недопустимое значение). Исправь тест, не решение.",
+        "test_ids": [
+          "tests/test_case.py::test_pass_preview_filters_and_boundaries"
+        ],
+        "run_names": []
+      }
+    ],
+    "runs": [
+      "build",
+      "collect",
+      "base/full",
+      "oracle/full",
+      "base/fail_to_pass",
+      "base/pass_to_pass",
+      "base/anti_cheat",
+      "oracle/fail_to_pass",
+      "oracle/pass_to_pass",
+      "oracle/anti_cheat",
+      "repeat/base/full",
+      "repeat/oracle/full",
+      "oracle/apply",
+      "mutant/hunk-1",
+      "mutant/hunk-2",
+      "mutant/llm-mutant-inverted-boundary-condition",
+      "mutant/llm-mutant-status-filter-skip",
+      "mutant/alt-solution-reordered-expression"
+    ],
+    "notes": [
+      "Мутант llm-mutant-arithmetic-sign-error отброшен: дублирует откат эталонного решения (hunk-revert) в backend/src/components/settlement/application/impl/services/NettingPolicy.py",
+      "Проверка на альтернативное корректное решение не проводилась: вариант не сгенерирован, не применился или сломал сборку. Тесты не доказали, что проверяют поведение, а не конкретный дифф эталона"
+    ]
+  }
+}

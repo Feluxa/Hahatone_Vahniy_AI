@@ -1,0 +1,11 @@
+--- a/backend/src/components/settlement/application/impl/services/NettingPolicy.py
++++ b/backend/src/components/settlement/application/impl/services/NettingPolicy.py
+@@ -22,7 +22,7 @@
+                 refunds += event.amount
+             count += 1
+         # TODO MC-214: сверить знак возвратов с договором расчётного закрытия.
++        net = purchases + refunds
+-        net = purchases - refunds
+         return SettlementModel(
+             tenant_id=tenant_id, merchant_id=merchant_id, business_date=business_date,
+             currency=currency, purchase_amount=purchases, refund_amount=refunds,

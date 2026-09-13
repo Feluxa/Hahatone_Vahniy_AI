@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="2.090" timestamp="2026-09-13T09:41:36.734790+00:00" hostname="e8f2ffce2f3a"><testcase classname="tests.test_case" name="test_fail_preview_refund_sign_mismatch" time="1.769"><failure message="NameError: name 'DockerContainer' is not defined">def test_fail_preview_refund_sign_mismatch() -&gt; None:
+        tz = ZoneInfo("Europe/Moscow")
+        events = [
+            MerchantEventModel(
+                tenant_id="t_rsign", event_id="e1", merchant_id="m_rsign",
+                occurred_at=datetime(2025, 1, 10, 12, 0, tzinfo=tz),
+                kind="purchase", status="settled", currency="RUB", amount=Decimal("100.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_rsign", event_id="e2", merchant_id="m_rsign",
+                occurred_at=datetime(2025, 1, 10, 13, 0, tzinfo=tz),
+                kind="refund", status="settled", currency="RUB", amount=Decimal("40.0000"),
+            ),
+        ]
+    
+        async def scenario() -&gt; None:
+            container = make_async_container(
+                SettlementApplication()(),
+                SettlementInfrastructure(events)(),
+            )
+            try:
+                async with container() as scope:
+                    query = await scope.get(IPreviewSettlementQuery)
+                    result = await query(CloseRequestModel(
+                        tenant_id="t_rsign", merchant_id="m_rsign",
+                        business_date=date(2025, 1, 10), currency="RUB",
+                    ))
+                # Ожидаемо после решения: purchases - refunds; сейчас будет + из-за дефекта
+                assert result.net_amount == Decimal("60.0000")
+            finally:
+                container.stop()
+    
+&gt;       asyncio.run(scenario())
+
+/tests/test_case.py:131: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+/tests/test_case.py:115: in scenario
+    container = make_async_container(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (&lt;dishka.provider.provider.Provider object at 0x7777e75cc2d0&gt;, &lt;dishka.provider.provider.Provider object at 0x7777e7593890&gt;)
+
+    def make_async_container(*args):
+&gt;       c = DockerContainer("postgres:16-alpine").with_exposed_ports(5432)
+            ^^^^^^^^^^^^^^^
+E       NameError: name 'DockerContainer' is not defined
+
+/tests/test_case.py:67: NameError</failure></testcase></testsuite></testsuites>

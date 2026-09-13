@@ -1,0 +1,46 @@
+{
+  "calls": [
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 8.198,
+      "input_tokens": 7641,
+      "output_tokens": 642,
+      "purpose": "spec"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 11.04,
+      "input_tokens": 1016,
+      "output_tokens": 916,
+      "purpose": "instruction"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 34.942,
+      "input_tokens": 7459,
+      "output_tokens": 2845,
+      "purpose": "tests"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 3.596,
+      "input_tokens": 5584,
+      "output_tokens": 219,
+      "purpose": "solution"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 3.113,
+      "input_tokens": 5355,
+      "output_tokens": 215,
+      "purpose": "mutants"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 31.95,
+      "input_tokens": 9639,
+      "output_tokens": 2654,
+      "purpose": "repair:tests"
+    }
+  ]
+}

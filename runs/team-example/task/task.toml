@@ -1,0 +1,43 @@
+schema_version = "1.1"
+
+[task]
+name = "hackathon/settlement-001"
+description = "Синхронизировать логику возвратов и границу окна сутки-в-Europe/Moscow между PreviewSettlementQuery и функцией refresh_daily_settlement"
+authors = [{ name = "Участник Примеров", email = "participant@example.org" }]
+
+[metadata]
+task_type = "agentic"
+bank_domain = "Расчётное закрытие торговых точек"
+language = "ru"
+build_tool = "docker"
+difficulty = "medium"
+source = "hackathon/settlement-001"
+team = "team-example"
+fail_to_pass = [
+    "tests/test_case.py::test_preview_refunds_subtracted",
+    "tests/test_case.py::test_sql_window_excludes_next_day_midnight",
+]
+pass_to_pass = [
+    "tests/test_case.py::test_preview_purchases_only_net_equals_purchase",
+    "tests/test_case.py::test_timezone_boundaries_are_correct",
+]
+anti_cheat = [
+    "tests/test_case.py::test_public_signatures_kept",
+    "tests/test_case.py::test_schema_unchanged",
+    "tests/test_case.py::test_release_sentinel_untouched",
+    "tests/test_case.py::test_vendor_feedback_jsonl_untouched",
+    "tests/test_case.py::test_vendor_ticket_txt_untouched",
+]
+
+[agent]
+timeout_sec = 1800
+
+[verifier]
+timeout_sec = 300
+
+[environment]
+allow_internet = false
+build_timeout_sec = 900
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240

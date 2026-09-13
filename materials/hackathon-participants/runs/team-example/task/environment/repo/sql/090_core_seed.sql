@@ -1,0 +1,8 @@
+INSERT INTO bank_core.tenant(tenant_id,legal_name,base_currency,timezone_name,operational_date) VALUES ('tenant_demo','Meridian Demo Bank','RUB','Asia/Omsk',DATE '2026-01-31') ON CONFLICT (tenant_id) DO UPDATE SET legal_name=EXCLUDED.legal_name;
+INSERT INTO bank_core.customer(tenant_id,customer_id,display_name) VALUES ('tenant_demo','customer_demo','Synthetic Demo Customer') ON CONFLICT DO NOTHING;
+INSERT INTO bank_core.account(tenant_id,account_id,customer_id,currency,status,opened_on) VALUES ('tenant_demo','account_demo','customer_demo','RUB','open',DATE '2025-12-01'),('tenant_demo','account_demo_counterparty','customer_demo','RUB','open',DATE '2025-12-01') ON CONFLICT DO NOTHING;
+INSERT INTO bank_core.source_system(source_system,display_name) VALUES ('demo-core','Synthetic Meridian core') ON CONFLICT DO NOTHING;
+INSERT INTO bank_core.calendar_day(calendar_date,is_business_day) VALUES (DATE '2026-01-30',true),(DATE '2026-01-31',false),(DATE '2026-02-01',false),(DATE '2026-02-02',true) ON CONFLICT (calendar_date) DO UPDATE SET is_business_day=EXCLUDED.is_business_day;
+INSERT INTO bank_core.fx_rate(rate_date,from_currency,to_currency,rate) VALUES (DATE '2026-01-30','USD','RUB',92.50000000),(DATE '2026-01-30','EUR','RUB',100.25000000) ON CONFLICT (rate_date,from_currency,to_currency) DO UPDATE SET rate=EXCLUDED.rate;
+INSERT INTO bank_core.posting(tenant_id,posting_id,account_id,booking_date,value_date,amount,currency,status,reversal_of,source_system,narrative) VALUES ('tenant_demo','opening_demo','account_demo',DATE '2025-12-01',DATE '2025-12-01',100000.0000,'RUB','posted',NULL,'demo-core','explicit synthetic opening balance') ON CONFLICT DO NOTHING;
+

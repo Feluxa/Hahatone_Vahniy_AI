@@ -1,0 +1,1 @@
+{"file_path": "sql/061_refresh_daily_settlement.sql", "anchor": "AND e.occurred_at < v_end;", "replacement": "AND e.occurred_at <= v_end;"}

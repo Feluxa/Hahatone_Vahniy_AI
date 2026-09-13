@@ -1,0 +1,1 @@
+{"file_path": "backend/src/components/settlement/application/impl/services/NettingPolicy.py", "anchor": "        net = purchases - refunds\n", "replacement": "        net = purchases + refunds\n", "source": "hunk_revert", "expected_reward": 0}

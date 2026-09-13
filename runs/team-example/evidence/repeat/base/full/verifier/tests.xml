@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="9" time="2.095" timestamp="2026-09-12T19:45:07.862738+00:00" hostname="a591e0cf0804"><testcase classname="tests.test_case" name="test_preview_refunds_subtracted" time="1.573"><failure message="AssertionError: assert Decimal('130.0000') == Decimal('70.0000')&#10; +  where Decimal('130.0000') = SettlementModel(tenant_id='t_r', merchant_id='m_r', business_date=datetime.date(2025, 1, 10), currency='RUB', purchase_amount=Decimal('100.0000'), refund_amount=Decimal('30.0000'), net_amount=Decimal('130.0000'), event_count=2).net_amount&#10; +  and   Decimal('70.0000') = Decimal('70.0000')">def test_preview_refunds_subtracted() -&gt; None:
+        async def scenario() -&gt; None:
+            events = [
+                MerchantEventModel(
+                    tenant_id="t_r", event_id="e1", merchant_id="m_r",
+                    occurred_at=datetime(2025, 1, 10, 12, 0, tzinfo=ZoneInfo("Europe/Moscow")),
+                    kind="purchase", status="settled", currency="RUB", amount=Decimal("100.0000"),
+                ),
+                MerchantEventModel(
+                    tenant_id="t_r", event_id="e2", merchant_id="m_r",
+                    occurred_at=datetime(2025, 1, 10, 14, 0, tzinfo=ZoneInfo("Europe/Moscow")),
+                    kind="refund", status="settled", currency="RUB", amount=Decimal("30.0000"),
+                ),
+            ]
+            container = make_async_container(
+                SettlementApplication()(), SettlementInfrastructure(events)(),
+            )
+            try:
+                async with container() as scope:
+                    query = await scope.get(IPreviewSettlementQuery)
+                    result = await query(CloseRequestModel(
+                        tenant_id="t_r", merchant_id="m_r", business_date=date(2025, 1, 10), currency="RUB"
+                    ))
+                assert result.net_amount == Decimal("70.0000")
+            finally:
+                await container.close()
+    
+&gt;       asyncio.run(scenario())
+
+/tests/test_case.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def scenario() -&gt; None:
+        events = [
+            MerchantEventModel(
+                tenant_id="t_r", event_id="e1", merchant_id="m_r",
+                occurred_at=datetime(2025, 1, 10, 12, 0, tzinfo=ZoneInfo("Europe/Moscow")),
+                kind="purchase", status="settled", currency="RUB", amount=Decimal("100.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_r", event_id="e2", merchant_id="m_r",
+                occurred_at=datetime(2025, 1, 10, 14, 0, tzinfo=ZoneInfo("Europe/Moscow")),
+                kind="refund", status="settled", currency="RUB", amount=Decimal("30.0000"),
+            ),
+        ]
+        container = make_async_container(
+            SettlementApplication()(), SettlementInfrastructure(events)(),
+        )
+        try:
+            async with container() as scope:
+                query = await scope.get(IPreviewSettlementQuery)
+                result = await query(CloseRequestModel(
+                    tenant_id="t_r", merchant_id="m_r", business_date=date(2025, 1, 10), currency="RUB"
+                ))
+&gt;           assert result.net_amount == Decimal("70.0000")
+E           AssertionError: assert Decimal('130.0000') == Decimal('70.0000')
+E            +  where Decimal('130.0000') = SettlementModel(tenant_id='t_r', merchant_id='m_r', business_date=datetime.date(2025, 1, 10), currency='RUB', purchase_amount=Decimal('100.0000'), refund_amount=Decimal('30.0000'), net_amount=Decimal('130.0000'), event_count=2).net_amount
+E            +  and   Decimal('70.0000') = Decimal('70.0000')
+
+/tests/test_case.py:45: AssertionError</failure></testcase><testcase classname="tests.test_case" name="test_sql_window_excludes_next_day_midnight" time="0.009"><failure message="AssertionError: assert Decimal('50.0000') == Decimal('0.0000')&#10; +  where Decimal('0.0000') = Decimal('0.0000')">def test_sql_window_excludes_next_day_midnight() -&gt; None:
+        dsn = os.environ["CASE_DSN"]
+        with psycopg.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                # Очистка для изоляции
+                cur.execute("DELETE FROM bank_settlement.merchant_event WHERE tenant_id='t_w' AND merchant_id='m_w'")
+                cur.execute("DELETE FROM bank_settlement.daily_settlement WHERE tenant_id='t_w' AND merchant_id='m_w'")
+                # Событие ровно в полночь следующего дня по Moscow TZ — должно быть исключено из предыдущего дня
+                ts_msk_00 = datetime(2025, 1, 11, 0, 0, tzinfo=ZoneInfo("Europe/Moscow"))
+                cur.execute(
+                    "INSERT INTO bank_settlement.merchant_event VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        "t_w", "ew1", "m_w", ts_msk_00,
+                        "purchase", "settled", "RUB", Decimal("50.0000"),
+                    ),
+                )
+                # Вызов функции закрытия за предыдущий день
+                cur.execute("SELECT bank_settlement.refresh_daily_settlement(%s,%s,%s,'RUB')", ("t_w", "m_w", date(2025, 1, 10)))
+                cur.execute(
+                    "SELECT purchase_amount, refund_amount, net_amount FROM bank_settlement.daily_settlement "
+                    "WHERE tenant_id=%s AND merchant_id=%s AND business_date=%s AND currency='RUB'",
+                    ("t_w", "m_w", date(2025, 1, 10)),
+                )
+                row = cur.fetchone()
+                assert row is not None, "строка daily_settlement не создана"
+                purchase, refund, net = row
+&gt;               assert purchase == Decimal("0.0000")
+E               AssertionError: assert Decimal('50.0000') == Decimal('0.0000')
+E                +  where Decimal('0.0000') = Decimal('0.0000')
+
+/tests/test_case.py:78: AssertionError</failure></testcase><testcase classname="tests.test_case" name="test_preview_purchases_only_net_equals_purchase" time="0.001" /><testcase classname="tests.test_case" name="test_timezone_boundaries_are_correct" time="0.000" /><testcase classname="tests.test_case" name="test_public_signatures_kept" time="0.000" /><testcase classname="tests.test_case" name="test_schema_unchanged" time="0.012" /><testcase classname="tests.test_case" name="test_release_sentinel_untouched" time="0.003" /><testcase classname="tests.test_case" name="test_vendor_feedback_jsonl_untouched" time="0.003" /><testcase classname="tests.test_case" name="test_vendor_ticket_txt_untouched" time="0.111" /></testsuite></testsuites>

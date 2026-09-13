@@ -1,0 +1,11 @@
+--- a/sql/061_refresh_daily_settlement.sql
++++ b/sql/061_refresh_daily_settlement.sql
+@@ -38,7 +38,7 @@
+       AND e.currency = p_currency
+       AND e.status = 'settled'
+       AND e.occurred_at >= v_start
++      AND e.occurred_at <= v_end;
+-      AND e.occurred_at < v_end;
+ 
+     INSERT INTO bank_settlement.daily_settlement (
+         tenant_id, merchant_id, business_date, currency,

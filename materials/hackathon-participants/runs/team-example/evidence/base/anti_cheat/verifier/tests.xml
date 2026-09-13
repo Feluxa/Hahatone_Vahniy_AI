@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="2.095" timestamp="2026-09-13T09:43:02.268994+00:00" hostname="c14bce7b9bec"><testcase classname="tests.test_case" name="test_schema_unchanged" time="1.626" /><testcase classname="tests.test_case" name="test_public_signatures_kept" time="0.000" /><testcase classname="tests.test_case" name="test_release_sentinel_untouched" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/tests/expected/DOCS/release_sentinel.txt.expected'">def test_release_sentinel_untouched() -&gt; None:
+        repo_root = Path(os.environ.get("REPO_PATH", "/app/repo"))
+        actual = (repo_root / "DOCS/release_sentinel.txt").read_bytes()
+&gt;       expected = (Path(__file__).parent / "expected" / "DOCS/release_sentinel.txt.expected").read_bytes()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+/tests/test_case.py:258: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.11/pathlib.py:1050: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/tests/expected/DOCS/release_sentinel.txt.expected')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/tests/expected/DOCS/release_sentinel.txt.expected'
+
+/usr/local/lib/python3.11/pathlib.py:1044: FileNotFoundError</failure></testcase><testcase classname="tests.test_case" name="test_archive_export_is_still_required" time="0.108" /></testsuite></testsuites>

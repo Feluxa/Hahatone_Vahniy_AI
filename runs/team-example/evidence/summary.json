@@ -1,0 +1,779 @@
+{
+  "runs": [
+    {
+      "name": "build",
+      "kind": "build",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "docker build -t case-verifier:task ."
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 5.952,
+      "exit_code": 0,
+      "reward": null,
+      "report_path": null,
+      "log_dir": null,
+      "tests": {},
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "collect",
+      "kind": "base",
+      "scope": "collect",
+      "executed": true,
+      "commands": [
+        "python -m pytest --rootdir=/ /tests --collect-only -q"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 1.953,
+      "exit_code": 0,
+      "reward": null,
+      "report_path": null,
+      "log_dir": "collect",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.564,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "base/full/verifier/tests.xml",
+      "log_dir": "base/full",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('130.0000') == Decimal('70.0000')\n +  where Decimal('130.0000') = SettlementModel(tenant_id='t_r', merchant_id='m_r', business_date=datetime.date(2025, 1, 10), currency='RUB', purchase_amount=Decimal('100.0000'), refund_amount=Decimal('30.0000'), net_amount=Decimal('130.0000'), event_count=2).net_amount\n +  and   Decimal('70.0000') = Decimal('70.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('50.0000') == Decimal('0.0000')\n +  where Decimal('0.0000') = Decimal('0.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.427,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/full/verifier/tests.xml",
+      "log_dir": "oracle/full",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/fail_to_pass",
+      "kind": "base",
+      "scope": "fail_to_pass",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh /tests/test_case.py::test_preview_refunds_subtracted /tests/test_case.py::test_sql_window_excludes_next_day_midnight"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.366,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "base/fail_to_pass/verifier/tests.xml",
+      "log_dir": "base/fail_to_pass",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('130.0000') == Decimal('70.0000')\n +  where Decimal('130.0000') = SettlementModel(tenant_id='t_r', merchant_id='m_r', business_date=datetime.date(2025, 1, 10), currency='RUB', purchase_amount=Decimal('100.0000'), refund_amount=Decimal('30.0000'), net_amount=Decimal('130.0000'), event_count=2).net_amount\n +  and   Decimal('70.0000') = Decimal('70.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('50.0000') == Decimal('0.0000')\n +  where Decimal('0.0000') = Decimal('0.0000')",
+          "exception_type": "AssertionError"
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/pass_to_pass",
+      "kind": "base",
+      "scope": "pass_to_pass",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh /tests/test_case.py::test_preview_purchases_only_net_equals_purchase /tests/test_case.py::test_timezone_boundaries_are_correct"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.241,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "base/pass_to_pass/verifier/tests.xml",
+      "log_dir": "base/pass_to_pass",
+      "tests": {
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "base/anti_cheat",
+      "kind": "base",
+      "scope": "anti_cheat",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh /tests/test_case.py::test_public_signatures_kept /tests/test_case.py::test_schema_unchanged /tests/test_case.py::test_release_sentinel_untouched /tests/test_case.py::test_vendor_feedback_jsonl_untouched /tests/test_case.py::test_vendor_ticket_txt_untouched"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.436,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "base/anti_cheat/verifier/tests.xml",
+      "log_dir": "base/anti_cheat",
+      "tests": {
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/fail_to_pass",
+      "kind": "oracle",
+      "scope": "fail_to_pass",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh /tests/test_case.py::test_preview_refunds_subtracted /tests/test_case.py::test_sql_window_excludes_next_day_midnight"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.498,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/fail_to_pass/verifier/tests.xml",
+      "log_dir": "oracle/fail_to_pass",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/pass_to_pass",
+      "kind": "oracle",
+      "scope": "pass_to_pass",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh /tests/test_case.py::test_preview_purchases_only_net_equals_purchase /tests/test_case.py::test_timezone_boundaries_are_correct"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.345,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/pass_to_pass/verifier/tests.xml",
+      "log_dir": "oracle/pass_to_pass",
+      "tests": {
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "oracle/anti_cheat",
+      "kind": "oracle",
+      "scope": "anti_cheat",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh /tests/test_case.py::test_public_signatures_kept /tests/test_case.py::test_schema_unchanged /tests/test_case.py::test_release_sentinel_untouched /tests/test_case.py::test_vendor_feedback_jsonl_untouched /tests/test_case.py::test_vendor_ticket_txt_untouched"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.868,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "oracle/anti_cheat/verifier/tests.xml",
+      "log_dir": "oracle/anti_cheat",
+      "tests": {
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "repeat/base/full",
+      "kind": "base",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.44,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "repeat/base/full/verifier/tests.xml",
+      "log_dir": "repeat/base/full",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('130.0000') == Decimal('70.0000')\n +  where Decimal('130.0000') = SettlementModel(tenant_id='t_r', merchant_id='m_r', business_date=datetime.date(2025, 1, 10), currency='RUB', purchase_amount=Decimal('100.0000'), refund_amount=Decimal('30.0000'), net_amount=Decimal('130.0000'), event_count=2).net_amount\n +  and   Decimal('70.0000') = Decimal('70.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('50.0000') == Decimal('0.0000')\n +  where Decimal('0.0000') = Decimal('0.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": "base/full",
+      "note": null
+    },
+    {
+      "name": "repeat/oracle/full",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.574,
+      "exit_code": 0,
+      "reward": 1,
+      "report_path": "repeat/oracle/full/verifier/tests.xml",
+      "log_dir": "repeat/oracle/full",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": "oracle/full",
+      "note": null
+    },
+    {
+      "name": "oracle/apply",
+      "kind": "oracle",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && cp -a /app/repo/. /out/"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 2.158,
+      "exit_code": 0,
+      "reward": null,
+      "report_path": null,
+      "log_dir": "oracle/apply",
+      "tests": {},
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-1",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && patch -p1 -d /app/repo < /logs/mutant.patch && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.576,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/hunk-1/verifier/tests.xml",
+      "log_dir": "mutant/hunk-1",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('130.0000') == Decimal('70.0000')\n +  where Decimal('130.0000') = SettlementModel(tenant_id='t_r', merchant_id='m_r', business_date=datetime.date(2025, 1, 10), currency='RUB', purchase_amount=Decimal('100.0000'), refund_amount=Decimal('30.0000'), net_amount=Decimal('130.0000'), event_count=2).net_amount\n +  and   Decimal('70.0000') = Decimal('70.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/hunk-2",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && patch -p1 -d /app/repo < /logs/mutant.patch && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.376,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/hunk-2/verifier/tests.xml",
+      "log_dir": "mutant/hunk-2",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('50.0000') == Decimal('0.0000')\n +  where Decimal('0.0000') = Decimal('0.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    },
+    {
+      "name": "mutant/llm-mutant-boundary-inclusive",
+      "kind": "mutant",
+      "scope": "full",
+      "executed": true,
+      "commands": [
+        "sh -c sh /solution/solve.sh && python /logs/apply_mutant.py && sh /tests/test.sh"
+      ],
+      "image_digest": "sha256:76fe320cc9be3ce26c9d4a9c6396adcde9cf458ec5d19adb97e6e8a14d6355b9",
+      "duration_sec": 3.32,
+      "exit_code": 0,
+      "reward": 0,
+      "report_path": "mutant/llm-mutant-boundary-inclusive/verifier/tests.xml",
+      "log_dir": "mutant/llm-mutant-boundary-inclusive",
+      "tests": {
+        "tests/test_case.py::test_preview_refunds_subtracted": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_sql_window_excludes_next_day_midnight": {
+          "outcome": "failed",
+          "message": "AssertionError: assert Decimal('50.0000') == Decimal('0.0000')\n +  where Decimal('0.0000') = Decimal('0.0000')",
+          "exception_type": "AssertionError"
+        },
+        "tests/test_case.py::test_preview_purchases_only_net_equals_purchase": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_timezone_boundaries_are_correct": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_public_signatures_kept": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_schema_unchanged": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_release_sentinel_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_feedback_jsonl_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        },
+        "tests/test_case.py::test_vendor_ticket_txt_untouched": {
+          "outcome": "passed",
+          "message": null,
+          "exception_type": null
+        }
+      },
+      "repeat_of": null,
+      "note": null
+    }
+  ],
+  "verdict": {
+    "ok": true,
+    "problems": [],
+    "runs": [
+      "build",
+      "collect",
+      "base/full",
+      "oracle/full",
+      "base/fail_to_pass",
+      "base/pass_to_pass",
+      "base/anti_cheat",
+      "oracle/fail_to_pass",
+      "oracle/pass_to_pass",
+      "oracle/anti_cheat",
+      "repeat/base/full",
+      "repeat/oracle/full",
+      "oracle/apply",
+      "mutant/hunk-1",
+      "mutant/hunk-2",
+      "mutant/llm-mutant-boundary-inclusive"
+    ],
+    "notes": []
+  }
+}

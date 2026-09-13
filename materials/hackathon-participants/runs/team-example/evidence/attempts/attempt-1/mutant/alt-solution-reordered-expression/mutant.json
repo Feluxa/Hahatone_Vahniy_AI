@@ -1,0 +1,1 @@
+{"file_path": "backend/src/components/settlement/application/impl/services/NettingPolicy.py", "anchor": "net = purchases + refunds", "replacement": "delta = -refunds\nnet = purchases + delta", "source": "alternative_solution", "expected_reward": 1}

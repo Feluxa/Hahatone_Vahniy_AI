@@ -1,0 +1,9 @@
+{
+  "protocol_version": "1.0",
+  "case_id": "hackathon/settlement-001",
+  "status": "ready",
+  "task_path": "task",
+  "evidence_path": "evidence",
+  "limitations": [],
+  "input_snapshot_sha256": "f63dfc6392b934d50c961f11250cc576d1160c27f4beb13628b5a720ffccea50"
+}

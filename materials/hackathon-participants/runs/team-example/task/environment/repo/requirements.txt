@@ -1,0 +1,6 @@
+pytest==9.0.2
+pydantic==2.11.3
+dishka==1.5.3
+psycopg[binary]==3.2.6
+SQLAlchemy==2.0.40
+alembic==1.15.2

@@ -1,0 +1,40 @@
+schema_version = "1.1"
+
+[task]
+name = "hackathon/settlement-001"
+description = "Устранить расхождение preview и SQL-материализации суточного закрытия за день в Europe/Moscow с учётом покупок/возвратов, статуса settled и изоляции тенантов"
+authors = [{ name = "Участник Примеров", email = "participant@example.org" }]
+
+[metadata]
+task_type = "agentic"
+bank_domain = "Расчётное закрытие торговых точек"
+language = "ru"
+build_tool = "docker"
+difficulty = "medium"
+source = "hackathon/settlement-001"
+team = "team-example"
+fail_to_pass = [
+    "tests/test_case.py::test_fail_preview_refund_sign_mismatch",
+]
+pass_to_pass = [
+    "tests/test_case.py::test_pass_preview_filters_and_boundaries",
+]
+anti_cheat = [
+    "tests/test_case.py::test_schema_unchanged",
+    "tests/test_case.py::test_public_signatures_kept",
+    "tests/test_case.py::test_release_sentinel_untouched",
+    "tests/test_case.py::test_archive_export_is_still_required",
+]
+
+[agent]
+timeout_sec = 1800
+
+[verifier]
+timeout_sec = 300
+
+[environment]
+allow_internet = false
+build_timeout_sec = 900
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.955" timestamp="2026-09-13T09:38:59.410666+00:00" hostname="ec9119666e01"><testcase classname="tests.test_case" name="test_fail_preview_refund_sign_mismatch" time="1.624"><failure message="NameError: name 'make_async_container' is not defined">def test_fail_preview_refund_sign_mismatch() -&gt; None:
+        tz = ZoneInfo("Europe/Moscow")
+        events = [
+            MerchantEventModel(
+                tenant_id="t_rsign", event_id="e1", merchant_id="m_rsign",
+                occurred_at=datetime(2025, 1, 10, 12, 0, tzinfo=tz),
+                kind="purchase", status="settled", currency="RUB", amount=Decimal("100.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_rsign", event_id="e2", merchant_id="m_rsign",
+                occurred_at=datetime(2025, 1, 10, 13, 0, tzinfo=tz),
+                kind="refund", status="settled", currency="RUB", amount=Decimal("40.0000"),
+            ),
+        ]
+    
+        async def scenario() -&gt; None:
+            container = make_async_container(
+                SettlementApplication()(),
+                SettlementInfrastructure(events)(),
+            )
+            try:
+                async with container() as scope:
+                    query = await scope.get(IPreviewSettlementQuery)
+                    result = await query(CloseRequestModel(
+                        tenant_id="t_rsign", merchant_id="m_rsign",
+                        business_date=date(2025, 1, 10), currency="RUB",
+                    ))
+                # Ожидаемо после решения: purchases - refunds; сейчас будет + из-за дефекта
+                assert result.net_amount == Decimal("60.0000")
+            finally:
+                await container.close()
+    
+&gt;       asyncio.run(scenario())
+
+/tests/test_case.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def scenario() -&gt; None:
+&gt;       container = make_async_container(
+                    ^^^^^^^^^^^^^^^^^^^^
+            SettlementApplication()(),
+            SettlementInfrastructure(events)(),
+        )
+E       NameError: name 'make_async_container' is not defined
+
+/tests/test_case.py:84: NameError</failure></testcase></testsuite></testsuites>

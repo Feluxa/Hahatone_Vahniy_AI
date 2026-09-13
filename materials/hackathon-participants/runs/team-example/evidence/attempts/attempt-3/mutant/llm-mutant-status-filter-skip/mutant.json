@@ -1,0 +1,1 @@
+{"file_path": "backend/src/components/settlement/application/impl/services/NettingPolicy.py", "anchor": "if event.status != \"settled\":\n                continue", "replacement": "# if event.status != \"settled\":\n#                continue", "source": "llm", "expected_reward": 0}

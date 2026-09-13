@@ -1,0 +1,74 @@
+{
+  "calls": [
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 9.694,
+      "input_tokens": 7641,
+      "output_tokens": 754,
+      "purpose": "spec"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 12.118,
+      "input_tokens": 1114,
+      "output_tokens": 1019,
+      "purpose": "instruction"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 25.485,
+      "input_tokens": 7573,
+      "output_tokens": 2190,
+      "purpose": "tests"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 3.053,
+      "input_tokens": 5669,
+      "output_tokens": 225,
+      "purpose": "solution"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 4.444,
+      "input_tokens": 5633,
+      "output_tokens": 333,
+      "purpose": "mutants"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 1.561,
+      "input_tokens": 5513,
+      "output_tokens": 95,
+      "purpose": "alternatives"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 29.852,
+      "input_tokens": 10948,
+      "output_tokens": 2541,
+      "purpose": "repair:tests"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 2.235,
+      "input_tokens": 7247,
+      "output_tokens": 111,
+      "purpose": "repair:solution"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 30.08,
+      "input_tokens": 9429,
+      "output_tokens": 2561,
+      "purpose": "repair:tests"
+    },
+    {
+      "model": "GigaChat-3-Ultra:32.9.23.6",
+      "duration_sec": 32.514,
+      "input_tokens": 11237,
+      "output_tokens": 2771,
+      "purpose": "repair:tests"
+    }
+  ]
+}

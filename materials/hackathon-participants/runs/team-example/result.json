@@ -1,0 +1,21 @@
+{
+  "protocol_version": "1.0",
+  "case_id": "hackathon/settlement-001",
+  "status": "failed",
+  "task_path": "task",
+  "evidence_path": "evidence",
+  "limitations": [
+    "Кейс собран не с первой попытки: попыток 4, итераций ремонта 3; улики неудачных попыток — evidence/attempts/attempt-N/",
+    "Итерация ремонта 1: правились tests по проблемам: test_invalid",
+    "Итерация ремонта 2: правились solution, tests по проблемам: base_guard_failed, internal, list_mismatch, oracle_failed, test_invalid",
+    "Итерация ремонта 3: правились tests по проблемам: test_invalid",
+    "Мутант llm-mutant-arithmetic-sign-error отброшен: дублирует откат эталонного решения (hunk-revert) в backend/src/components/settlement/application/impl/services/NettingPolicy.py",
+    "Проверка на альтернативное корректное решение не проводилась: вариант не сгенерирован, не применился или сломал сборку. Тесты не доказали, что проверяют поведение, а не конкретный дифф эталона",
+    "Кейс не прошёл верификацию после 3 итераций ремонта",
+    "Тест tests/test_case.py::test_fail_preview_refund_sign_mismatch падает одинаково на исходном коде и на эталоне: TypeError: TypeError: 'async with' received an object from __aenter__ that does not implement __await__: Scope. Продукт тут ни при чём — невалиден сам тест (неверные входные данные, несуществующее поле или недопустимое значение). Исправь тест, не решение.",
+    "Тест tests/test_case.py::test_pass_preview_filters_and_boundaries падает одинаково на исходном коде и на эталоне: TypeError: TypeError: 'async with' received an object from __aenter__ that does not implement __await__: Scope. Продукт тут ни при чём — невалиден сам тест (неверные входные данные, несуществующее поле или недопустимое значение). Исправь тест, не решение.",
+    "Тест tests/test_case.py::test_schema_unchanged падает одинаково на исходном коде и на эталоне: OperationalError: psycopg.OperationalError: connection failed: connection to server at \"127.0.0.1\", port 5432 failed: FATAL:  database \"bank\" does not exist. Продукт тут ни при чём — невалиден сам тест (неверные входные данные, несуществующее поле или недопустимое значение). Исправь тест, не решение.",
+    "Тест tests/test_case.py::test_release_sentinel_untouched падает одинаково на исходном коде и на эталоне: FileNotFoundError: FileNotFoundError: [Errno 2] No such file or directory: '/tests/expected/DOCS/release_sentinel.txt.expected'. Продукт тут ни при чём — невалиден сам тест (неверные входные данные, несуществующее поле или недопустимое значение). Исправь тест, не решение."
+  ],
+  "input_snapshot_sha256": "f63dfc6392b934d50c961f11250cc576d1160c27f4beb13628b5a720ffccea50"
+}

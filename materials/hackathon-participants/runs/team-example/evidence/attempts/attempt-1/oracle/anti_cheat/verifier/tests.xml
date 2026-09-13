@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="4" time="1.910" timestamp="2026-09-13T09:39:15.660503+00:00" hostname="e644362c4281"><testcase classname="tests.test_case" name="test_schema_unchanged" time="1.503" /><testcase classname="tests.test_case" name="test_public_signatures_kept" time="0.001"><failure message="NameError: name 'SettlementModel' is not defined">def test_public_signatures_kept() -&gt; None:
+        sig = inspect.signature(PreviewSettlementQuery.__call__)
+        assert set(sig.parameters) == {"self", "request"}
+    
+&gt;       fields = set(SettlementModel.__annotations__)
+                     ^^^^^^^^^^^^^^^
+E       NameError: name 'SettlementModel' is not defined
+
+/tests/test_case.py:185: NameError</failure></testcase><testcase classname="tests.test_case" name="test_release_sentinel_untouched" time="0.003" /><testcase classname="tests.test_case" name="test_archive_export_is_still_required" time="0.109" /></testsuite></testsuites>

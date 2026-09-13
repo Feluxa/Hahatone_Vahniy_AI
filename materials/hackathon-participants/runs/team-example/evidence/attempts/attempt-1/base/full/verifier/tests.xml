@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="6" time="2.202" timestamp="2026-09-13T09:38:52.905972+00:00" hostname="77df43293965"><testcase classname="tests.test_case" name="test_fail_preview_refund_sign_mismatch" time="1.676"><failure message="NameError: name 'make_async_container' is not defined">def test_fail_preview_refund_sign_mismatch() -&gt; None:
+        tz = ZoneInfo("Europe/Moscow")
+        events = [
+            MerchantEventModel(
+                tenant_id="t_rsign", event_id="e1", merchant_id="m_rsign",
+                occurred_at=datetime(2025, 1, 10, 12, 0, tzinfo=tz),
+                kind="purchase", status="settled", currency="RUB", amount=Decimal("100.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_rsign", event_id="e2", merchant_id="m_rsign",
+                occurred_at=datetime(2025, 1, 10, 13, 0, tzinfo=tz),
+                kind="refund", status="settled", currency="RUB", amount=Decimal("40.0000"),
+            ),
+        ]
+    
+        async def scenario() -&gt; None:
+            container = make_async_container(
+                SettlementApplication()(),
+                SettlementInfrastructure(events)(),
+            )
+            try:
+                async with container() as scope:
+                    query = await scope.get(IPreviewSettlementQuery)
+                    result = await query(CloseRequestModel(
+                        tenant_id="t_rsign", merchant_id="m_rsign",
+                        business_date=date(2025, 1, 10), currency="RUB",
+                    ))
+                # Ожидаемо после решения: purchases - refunds; сейчас будет + из-за дефекта
+                assert result.net_amount == Decimal("60.0000")
+            finally:
+                await container.close()
+    
+&gt;       asyncio.run(scenario())
+
+/tests/test_case.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def scenario() -&gt; None:
+&gt;       container = make_async_container(
+                    ^^^^^^^^^^^^^^^^^^^^
+            SettlementApplication()(),
+            SettlementInfrastructure(events)(),
+        )
+E       NameError: name 'make_async_container' is not defined
+
+/tests/test_case.py:84: NameError</failure></testcase><testcase classname="tests.test_case" name="test_pass_preview_filters_and_boundaries" time="0.001"><failure message="NameError: name 'make_async_container' is not defined">def test_pass_preview_filters_and_boundaries() -&gt; None:
+        tz = ZoneInfo("Europe/Moscow")
+        d = date(2025, 1, 10)
+        start = datetime.combine(d, time.min, tz)
+        end = datetime.combine(d + timedelta(days=1), time.min, tz)
+        events = [
+            MerchantEventModel(
+                tenant_id="t_pf", event_id="p1", merchant_id="m_pf",
+                occurred_at=start + timedelta(hours=1), kind="purchase", status="settled", currency="RUB", amount=Decimal("10.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_pf", event_id="r1", merchant_id="m_pf",
+                occurred_at=end - timedelta(minutes=1), kind="refund", status="settled", currency="RUB", amount=Decimal("3.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_pf", event_id="x1", merchant_id="m_pf",
+                occurred_at=end, kind="purchase", status="settled", currency="RUB", amount=Decimal("999.0000"),
+            ),
+            MerchantEventModel(
+                tenant_id="t_pf", event_id="x2", merchant_id="m_pf",
+                occurred_at=start + timedelta(hours=2), kind="purchase", status="pending", currency="RUB", amount=Decimal("50.0000"),
+            ),
+        ]
+    
+        async def scenario() -&gt; None:
+            container = make_async_container(
+                SettlementApplication()(),
+                SettlementInfrastructure(events)(),
+            )
+            try:
+                async with container() as scope:
+                    query = await scope.get(IPreviewSettlementQuery)
+                    result = await query(CloseRequestModel(
+                        tenant_id="t_pf", merchant_id="m_pf", business_date=d, currency="RUB",
+                    ))
+                assert result.purchase_amount == Decimal("10.0000")
+                assert result.refund_amount == Decimal("3.0000")
+                assert result.net_amount == Decimal("7.0000")
+                assert result.event_count == 2
+            finally:
+                await container.close()
+    
+&gt;       asyncio.run(scenario())
+
+/tests/test_case.py:148: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.11/asyncio/runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/asyncio/base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def scenario() -&gt; None:
+&gt;       container = make_async_container(
+                    ^^^^^^^^^^^^^^^^^^^^
+            SettlementApplication()(),
+            SettlementInfrastructure(events)(),
+        )
+E       NameError: name 'make_async_container' is not defined
+
+/tests/test_case.py:131: NameError</failure></testcase><testcase classname="tests.test_case" name="test_schema_unchanged" time="0.014" /><testcase classname="tests.test_case" name="test_public_signatures_kept" time="0.000"><failure message="NameError: name 'SettlementModel' is not defined">def test_public_signatures_kept() -&gt; None:
+        sig = inspect.signature(PreviewSettlementQuery.__call__)
+        assert set(sig.parameters) == {"self", "request"}
+    
+&gt;       fields = set(SettlementModel.__annotations__)
+                     ^^^^^^^^^^^^^^^
+E       NameError: name 'SettlementModel' is not defined
+
+/tests/test_case.py:185: NameError</failure></testcase><testcase classname="tests.test_case" name="test_release_sentinel_untouched" time="0.003" /><testcase classname="tests.test_case" name="test_archive_export_is_still_required" time="0.108" /></testsuite></testsuites>

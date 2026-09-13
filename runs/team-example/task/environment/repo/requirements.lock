@@ -1,0 +1,17 @@
+alembic==1.15.2
+annotated-types==0.8.0
+dishka==1.5.3
+iniconfig==2.3.0
+Mako==1.4.1
+MarkupSafe==3.0.3
+packaging==26.3
+pluggy==1.6.0
+psycopg==3.2.6
+psycopg-binary==3.2.6
+pydantic==2.11.3
+pydantic_core==2.33.1
+Pygments==2.21.0
+pytest==9.0.2
+SQLAlchemy==2.0.40
+typing-inspection==0.4.4
+typing_extensions==4.16.0
