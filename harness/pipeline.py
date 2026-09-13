@@ -181,7 +181,16 @@ def run(case: CaseInput) -> CaseResult:
             extra_mutants=[*llm_mutants, *alt_solutions],
         )
 
+        # Улики неудачных попыток. По готовой папке кейса нельзя было отличить «собралось
+        # сразу» от «тесты переписывали, пока не перестали падать»: перед каждой итерацией
+        # evidence/ удалялся целиком. Копятся рядом с evidence/, чтобы пережить его
+        # пересоздание, и в конце уезжают в evidence/attempts/.
+        attempts_tmp = case.output_dir / "evidence-attempts"
+        repair_log: list[str] = []
+        attempts_made = 0
+
         for iteration in range(MAX_REPAIR_ITERATIONS + 1):
+            attempts_made = iteration + 1
             if iteration > 0:
                 LOGGER.info("Repair iteration %d / %d", iteration, MAX_REPAIR_ITERATIONS)
 
@@ -189,7 +198,13 @@ def run(case: CaseInput) -> CaseResult:
             if task_dir.exists():
                 shutil.rmtree(task_dir)
             if evidence_dir.exists():
-                shutil.rmtree(evidence_dir)
+                # Не удаляем, а откладываем: попытка, которая не удалась, — часть истории
+                # прогона, и жюри должно видеть её, а не только удачную.
+                attempt_dir = attempts_tmp / f"attempt-{iteration}"
+                attempt_dir.parent.mkdir(parents=True, exist_ok=True)
+                if attempt_dir.exists():
+                    shutil.rmtree(attempt_dir)
+                shutil.move(str(evidence_dir), str(attempt_dir))
 
             # 8 & 9. verify_case (includes static checks, Docker runs, mutants).
             # Несобираемый черновик — это провал итерации, а не конец прогона: следующая
@@ -211,15 +226,46 @@ def run(case: CaseInput) -> CaseResult:
                 # 10. Repair — собираем логи и чиним. Ремонт, который сам не удался,
                 # оставляет прежний рабочий черновик.
                 log_excerpts = _collect_log_excerpts(runs, evidence_dir)
+                targets = sorted({
+                    p.target.value for p in verdict.problems if p.target is not RepairTarget.NONE
+                })
+                categories = sorted({p.category.value for p in verdict.problems})
                 try:
                     draft = repair(client, context, draft, verdict, log_excerpts)
+                    repair_log.append(
+                        f"Итерация ремонта {iteration + 1}: правились "
+                        f"{', '.join(targets) if targets else 'ничего'} "
+                        f"по проблемам: {', '.join(categories)}"
+                    )
                 except DRAFT_ERRORS as error:
                     LOGGER.warning("Итерация %d: ремонт не удался: %s", iteration, error)
+                    repair_log.append(
+                        f"Итерация ремонта {iteration + 1}: не удалась ({error}), "
+                        f"черновик оставлен прежним"
+                    )
             else:
                 break
 
-        # 11. Evidence — usage
+        # 11. Evidence — usage и улики неудачных попыток
+        evidence_dir.mkdir(parents=True, exist_ok=True)
         write_usage(evidence_dir, usage)
+
+        if attempts_tmp.exists():
+            attempts_final = evidence_dir / "attempts"
+            if attempts_final.exists():
+                shutil.rmtree(attempts_final)
+            shutil.move(str(attempts_tmp), str(attempts_final))
+
+        if repair_log:
+            # Кейс, собравшийся со второй попытки, — это ограничение, а не провал. Молчать
+            # о нём нельзя: по llm_usage.json ремонт всё равно виден, и необъявленный он
+            # читается как сокрытие.
+            limitations.append(
+                f"Кейс собран не с первой попытки: попыток {attempts_made}, "
+                f"итераций ремонта {len(repair_log)}; улики неудачных попыток — "
+                f"evidence/attempts/attempt-N/"
+            )
+            limitations.extend(repair_log)
 
         if final_verdict and final_verdict.notes:
             # Верификация что-то поправила сама (например, переложила тест между списками):

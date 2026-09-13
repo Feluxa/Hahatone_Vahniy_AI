@@ -274,3 +274,73 @@ def test_verdict_notes_reach_limitations_without_failing(
     written = json.loads((case.output_dir / "result.json").read_text(encoding="utf-8"))
     assert written["status"] == "ready"
     assert written["limitations"] == [note]
+
+
+def test_repair_attempts_are_preserved_and_declared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Кейс, собравшийся со второй попытки, говорит об этом сам.
+
+    Раньше evidence/ неудачной попытки удалялся целиком, а в limitations не попадало
+    ничего: по папке кейса нельзя было отличить «собралось сразу» от «тесты переписывали».
+    """
+    failing = Verdict(
+        ok=False,
+        problems=[Problem(
+            category=ProblemCategory.BASE_F2P_PASSED,
+            target=RepairTarget.TESTS,
+            details="Defect not reproduced: fail_to_pass test passed in base/full",
+            test_ids=["tests/test_x.py::test_bug"],
+        )],
+        runs=["base/full"],
+    )
+    passing = Verdict(ok=True, problems=[], runs=["base/full"])
+
+    _stub_pipeline(monkeypatch, verdict=passing, runs=[])
+
+    verdicts = [failing, passing]
+    attempts_seen: list[int] = []
+
+    def _verify_case(task_dir, evidence_dir, limits, options=None):
+        index = len(attempts_seen)
+        attempts_seen.append(index)
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / "summary.json").write_text(
+            json.dumps({"attempt": index}), encoding="utf-8",
+        )
+        return [], verdicts[index]
+
+    monkeypatch.setattr(pipeline, "verify_case", _verify_case)
+
+    case = _case(tmp_path)
+    result = pipeline.run(case)
+
+    assert result.status is Status.READY
+    assert attempts_seen == [0, 1]
+
+    evidence_dir = case.output_dir / "evidence"
+    # Улики удачной попытки лежат на своём месте по протоколу.
+    assert json.loads((evidence_dir / "summary.json").read_text(encoding="utf-8")) == {"attempt": 1}
+    # Улики провальной — рядом, а не стёрты.
+    saved = evidence_dir / "attempts" / "attempt-1" / "summary.json"
+    assert json.loads(saved.read_text(encoding="utf-8")) == {"attempt": 0}
+    # Временный каталог за собой не оставляем.
+    assert not (case.output_dir / "evidence-attempts").exists()
+
+    assert any("попыток 2" in note for note in result.limitations)
+    assert any("итераций ремонта 1" in note for note in result.limitations)
+    assert any(
+        "base_f2p_passed" in note and "tests" in note for note in result.limitations
+    )
+
+
+def test_single_attempt_declares_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Кейс, собравшийся сразу, не обрастает разделом про ремонт и папкой attempts."""
+    _stub_pipeline(monkeypatch, verdict=Verdict(ok=True, problems=[], runs=[]), runs=[])
+
+    case = _case(tmp_path)
+    result = pipeline.run(case)
+
+    assert result.status is Status.READY
+    assert result.limitations == []
+    assert not (case.output_dir / "evidence" / "attempts").exists()
