@@ -317,7 +317,8 @@ def _check_fail_to_pass(
                 target=RepairTarget.TESTS,
                 details=(
                     f"fail_to_pass test '{test_id}' failed in {run.name} with "
-                    f"{report.exception_type or report.outcome}, not AssertionError: {report.message}"
+                    f"{report.exception_type or 'unrecognised exception'}, "
+                    f"not AssertionError: {report.message}"
                 ),
                 test_ids=[test_id],
                 run_names=[run.name],

@@ -13,6 +13,10 @@ EXCEPTION_PREFIX = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Exit|Interrupt|Failed|Warning))\s*:"
 )
 
+# Последняя строка трейсбека pytest: '<файл>:<строка>: <ИмяИсключения>'. Имя здесь не
+# квалифицировано модулем и есть даже у голого assert, которому pytest не печатает тип.
+CRASH_LINE = re.compile(r"^.*:\d+:\s*([A-Za-z_][A-Za-z0-9_.]*)\s*$")
+
 
 def _normalize_test_id(file_attr: str | None, classname_attr: str | None, name_attr: str) -> str:
     """Нормализует путь и имя теста к формату pytest ID, например 'tests/test_x.py::test_name'."""
@@ -50,59 +54,55 @@ def _normalize_test_id(file_attr: str | None, classname_attr: str | None, name_a
     return f"{path}::{name_attr}"
 
 
-def _exception_type_from_message(message: str | None) -> str:
-    """Тип исключения из первой строки сообщения junit.
-
-    pytest пишет <failure> без атрибута type и для голого assert, и для любого другого
-    исключения в теле теста, поэтому различить их можно только по сообщению:
-    'assert 1 == 2' против 'TypeError: unsupported operand type(s)'.
-    Без этого fail_to_pass, падающий на TypeError или AttributeError, засчитывался бы
-    как воспроизведённый дефект (PROTOCOL §5.4).
-
-    Префикс считается типом исключения, только если похож на его имя, — чтобы не принять
-    за тип начало обычного сообщения assert.
-    """
-    if not message:
-        return "AssertionError"
-    match = EXCEPTION_PREFIX.match(message)
-    return match.group(1) if match else "AssertionError"
-
-
-def _exception_type_from_error(message: str | None, text: str | None) -> str | None:
-    """Тип исключения для <error>: ошибка сбора, импорта или фикстуры.
+def _exception_type_from_report(message: str | None, text: str | None) -> str | None:
+    """Тип исключения по отчёту pytest. None — определить не удалось.
 
     pytest не пишет атрибут type ни у <failure>, ни у <error> — только у <skipped>
-    (см. _pytest/junitxml.py). У ошибки сбора message всегда буквально 'collection failure',
-    а само исключение лежит последней строкой трейсбека в теле элемента и помечено 'E ':
+    (см. _pytest/junitxml.py), поэтому тип восстанавливается из текста. Источники, в
+    порядке надёжности:
 
-        E     File ".../repo/module.py", line 1
-        E   SyntaxError: invalid syntax
+    1. Последняя строка трейсбека — место падения и имя исключения:
+       '/tests/test_case.py:45: AssertionError'. Имя там есть всегда и в чистом виде;
+       у голого 'assert a == b' его больше нет нигде.
+    2. Строки трейсбека с маркером 'E' — так выглядит ошибка сбора, у которой строки
+       места падения нет: 'E   SyntaxError: invalid syntax'. Берётся последнее
+       совпадение: при цепочке исключений внизу стоит дошедшее до pytest.
+    3. Начало message: 'TypeError: ...'. В message имя бывает квалифицировано модулем
+       ('test_kinds.CheckViolation: ...'), поэтому источник запасной.
+    4. message вида 'assert ...' — голый assert при отключённом трейсбеке.
 
-    Поэтому сообщение разбирается как у failure, а если в нём типа нет — берётся последнее
-    похожее на имя исключения совпадение из трейсбека (последнее, потому что при цепочке
-    исключений внизу стоит то, которое дошло до pytest).
-
-    В отличие от _exception_type_from_message, умолчания 'AssertionError' здесь нет:
-    ошибка сбора никогда не является провалом проверки, и выдавать её за assert нельзя.
+    Умолчания нет намеренно. Прежнее «всё непонятное — это AssertionError» засчитывало
+    падение по любой неопознанной причине как воспроизведённый дефект, что запрещает
+    PROTOCOL §5.4. Неопознанный тип должен оставаться неопознанным: failed_by_assertion
+    у такого отчёта False, и вердикт потребует разобраться.
     """
+    lines = [line.rstrip() for line in (text or "").splitlines() if line.strip()]
+
+    if lines:
+        crash = CRASH_LINE.match(lines[-1])
+        if crash:
+            return crash.group(1)
+
+    found: str | None = None
+    for line in lines:
+        stripped = line.strip()
+        # Строки трейсбека pytest помечает 'E' с отступом; убираем маркер, если он есть.
+        if stripped.startswith("E ") or stripped == "E":
+            stripped = stripped[1:].strip()
+        match = EXCEPTION_PREFIX.match(stripped)
+        if match:
+            found = match.group(1)
+    if found:
+        return found
+
     if message:
         match = EXCEPTION_PREFIX.match(message)
         if match:
             return match.group(1)
+        if message.lstrip().startswith("assert"):
+            return "AssertionError"
 
-    if not text:
-        return None
-
-    found: str | None = None
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        # Строки трейсбека pytest помечает 'E' с отступом; убираем маркер, если он есть.
-        if line.startswith("E ") or line == "E":
-            line = line[1:].strip()
-        match = EXCEPTION_PREFIX.match(line)
-        if match:
-            found = match.group(1)
-    return found
+    return None
 
 
 def parse_junit(xml_path: Path) -> dict[str, TestReport]:
@@ -140,7 +140,7 @@ def parse_junit(xml_path: Path) -> dict[str, TestReport]:
             reports[test_id] = TestReport(
                 outcome=TestOutcome.FAILED,
                 message=msg,
-                exception_type=exc_type or _exception_type_from_message(msg),
+                exception_type=exc_type or _exception_type_from_report(msg, failure_el.text),
             )
         elif error_el is not None:
             msg = error_el.get("message")
@@ -150,7 +150,7 @@ def parse_junit(xml_path: Path) -> dict[str, TestReport]:
             reports[test_id] = TestReport(
                 outcome=TestOutcome.ERROR,
                 message=msg,
-                exception_type=exc_type or _exception_type_from_error(msg, error_el.text),
+                exception_type=exc_type or _exception_type_from_report(msg, error_el.text),
             )
         elif skipped_el is not None:
             msg = skipped_el.get("message")

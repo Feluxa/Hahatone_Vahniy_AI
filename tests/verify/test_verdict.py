@@ -10,6 +10,7 @@ from harness.contracts import (
 )
 import pytest
 
+from harness.verify.junit import parse_junit
 from harness.verify.verdict import (
     EXPECTED_REWARD,
     decide,
@@ -644,3 +645,46 @@ def test_invalid_test_detected_across_list_runs() -> None:
     ]
 
     assert set(invalid_tests(runs)) == {_AC}
+
+
+# Настоящая форма отчёта pytest: атрибута type нет, имя исключения — в последней
+# строке трейсбека. Раньше такой отчёт молча становился AssertionError.
+_DB_FAILURE_XML = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.1">
+<testcase classname="tests.test_x" name="test_bug" file="tests/test_x.py" time="0.0">
+<failure message="psycopg.errors.UndefinedTable: relation &quot;daily_settlement&quot; does not exist">\
+E       psycopg.errors.UndefinedTable: relation "daily_settlement" does not exist
+
+/tests/test_x.py:12: UndefinedTable</failure></testcase>
+</testsuite></testsuites>
+"""
+
+
+def test_database_error_is_not_a_reproduced_defect(tmp_path) -> None:
+    """Дефект должен воспроизводиться assert'ом, а не сбоем БД (PROTOCOL §5.4).
+
+    Отчёт берётся из разбора настоящего XML, а не собирается руками: именно на разборе
+    и ломалась проверка — неопознанное исключение по умолчанию объявлялось AssertionError.
+    """
+    xml_path = tmp_path / "tests.xml"
+    xml_path.write_text(_DB_FAILURE_XML, encoding="utf-8")
+    base_f2p = parse_junit(xml_path)[_F2P]
+    assert base_f2p.exception_type == "UndefinedTable"
+
+    lists = _make_sample_lists()
+    runs = [
+        _run("base/full", RunKind.BASE, RunScope.FULL,
+             {_F2P: base_f2p, _P2P: _PASSED, _AC: _PASSED}, 0),
+        _run("oracle/full", RunKind.ORACLE, RunScope.FULL,
+             {_F2P: _PASSED, _P2P: _PASSED, _AC: _PASSED}, 1),
+    ]
+
+    verdict = decide(runs, lists, [])
+
+    assert verdict.ok is False
+    not_assertion = [
+        p for p in verdict.problems if p.category == ProblemCategory.BASE_NOT_ASSERTION
+    ]
+    assert len(not_assertion) == 1
+    assert not_assertion[0].test_ids == [_F2P]
+    assert "UndefinedTable" in not_assertion[0].details

@@ -197,3 +197,91 @@ def test_error_without_exception_name_keeps_none() -> None:
         assert report.exception_type is None
     finally:
         f_path.unlink()
+
+
+# Форма взята из настоящего отчёта pytest 8.x: атрибута type нет ни у одного <failure>,
+# а имя исключения стоит последней строкой трейсбека как '<файл>:<строка>: <Имя>'.
+# У голого assert это единственное место, где имя вообще есть.
+FAILURE_KINDS_XML = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="5" time="0.2">
+<testcase classname="tests.test_kinds" name="test_bare_assert" file="tests/test_kinds.py" time="0.0">
+<failure message="assert 130 == 70">def test_bare_assert():
+&gt;       assert 130 == 70
+E       assert 130 == 70
+
+/tests/test_kinds.py:9: AssertionError</failure></testcase>
+<testcase classname="tests.test_kinds" name="test_type_error" file="tests/test_kinds.py" time="0.0">
+<failure message="TypeError: unsupported operand type(s)">&gt;       raise TypeError("unsupported operand type(s)")
+E       TypeError: unsupported operand type(s)
+
+/tests/test_kinds.py:17: TypeError</failure></testcase>
+<testcase classname="tests.test_kinds" name="test_check_violation" file="tests/test_kinds.py" time="0.0">
+<failure message="psycopg.errors.CheckViolation: violates check constraint">\
+E       psycopg.errors.CheckViolation: violates check constraint
+
+/tests/test_kinds.py:21: CheckViolation</failure></testcase>
+<testcase classname="tests.test_kinds" name="test_pytest_fail" file="tests/test_kinds.py" time="0.0">
+<failure message="Failed: ожидали строку">E       Failed: ожидали строку
+
+/tests/test_kinds.py:25: Failed</failure></testcase>
+<testcase classname="tests.test_kinds" name="test_no_traceback" file="tests/test_kinds.py" time="0.0">
+<failure message="psycopg.errors.UndefinedTable: relation does not exist" /></testcase>
+</testsuite></testsuites>
+"""
+
+
+def test_exception_type_is_taken_from_the_crash_line() -> None:
+    """Тип исключения берётся из отчёта, а не угадывается, и умолчания AssertionError нет.
+
+    Прежнее правило «всё непонятное — это AssertionError» засчитывало падение по любой
+    неопознанной причине как воспроизведённый дефект (PROTOCOL §5.4 это запрещает).
+    """
+    with tempfile.NamedTemporaryFile("w", suffix=".xml", encoding="utf-8", delete=False) as f:
+        f.write(FAILURE_KINDS_XML)
+        f_path = Path(f.name)
+
+    try:
+        reports = parse_junit(f_path)
+        by_name = {test_id.split("::")[-1]: report for test_id, report in reports.items()}
+
+        # Голый assert: имя исключения есть только в строке места падения.
+        assert by_name["test_bare_assert"].exception_type == "AssertionError"
+        assert by_name["test_bare_assert"].failed_by_assertion is True
+
+        assert by_name["test_type_error"].exception_type == "TypeError"
+        assert by_name["test_type_error"].failed_by_assertion is False
+
+        # Доменное исключение, имя которого не оканчивается на Error/Exception.
+        assert by_name["test_check_violation"].exception_type == "CheckViolation"
+        assert by_name["test_check_violation"].failed_by_assertion is False
+
+        # pytest.fail — намеренный провал, а не проверка утверждения.
+        assert by_name["test_pytest_fail"].exception_type == "Failed"
+        assert by_name["test_pytest_fail"].failed_by_assertion is False
+
+        # Трейсбека нет, а имя в message не опознаётся как исключение: остаётся None,
+        # и такой провал не выдаётся за воспроизведённый дефект.
+        assert by_name["test_no_traceback"].exception_type is None
+        assert by_name["test_no_traceback"].failed_by_assertion is False
+    finally:
+        f_path.unlink()
+
+
+def test_bare_assert_without_traceback_is_still_an_assertion() -> None:
+    """При отключённом трейсбеке голый assert опознаётся по самому message."""
+    xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.1">
+<testcase classname="tests.test_x" name="test_one" file="tests/test_x.py" time="0.0">
+<failure message="assert Decimal('130.0000') == Decimal('70.0000')" /></testcase>
+</testsuite></testsuites>
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".xml", encoding="utf-8", delete=False) as f:
+        f.write(xml_content)
+        f_path = Path(f.name)
+
+    try:
+        report = parse_junit(f_path)["tests/test_x.py::test_one"]
+        assert report.exception_type == "AssertionError"
+        assert report.failed_by_assertion is True
+    finally:
+        f_path.unlink()
