@@ -252,6 +252,7 @@ class RunResult:
 class MutantSource(str, Enum):
     HUNK_REVERT = "hunk_revert"
     LLM = "llm"
+    ALTERNATIVE_SOLUTION = "alternative_solution"
 
 
 @dataclass(frozen=True)
@@ -267,6 +268,7 @@ class Mutant:
     file_path: str = ""             # путь относительно /app/repo
     anchor: str = ""                # заменяемый текст
     replacement: str = ""           # чем заменяется
+    expected_reward: int = 0        # 0 для мутантов-ошибок, 1 для альтернативных корректных решений
 
     @property
     def is_replacement(self) -> bool:
@@ -286,6 +288,7 @@ class ProblemCategory(str, Enum):
     REWARD_WRONG = "reward_wrong"
     NOT_REPRODUCIBLE = "not_reproducible"
     MUTANT_SURVIVED = "mutant_survived"
+    ALTERNATIVE_SOLUTION_FAILED = "alternative_solution_failed"  # PROTOCOL §5.7: тесты отвергли корректную альтернативу
     INSTRUCTION_LEAK = "instruction_leak"      # имена тестов, пути tests/ solution/, куски решения
     SOLUTION_TOUCHES_TESTS = "solution_touches_tests"
     TASK_DIR_DIRTY = "task_dir_dirty"          # логи, кэши, .git, .venv в task/
@@ -293,6 +296,7 @@ class ProblemCategory(str, Enum):
     INTERNAL = "internal"
     # Тест падает одинаково до и после решения не по assert: невалиден сам тест, не продукт.
     TEST_INVALID = "test_invalid"
+
 
 
 class RepairTarget(str, Enum):

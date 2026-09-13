@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import logging
 import tempfile
 import tomllib
 from dataclasses import dataclass, field
@@ -9,7 +8,7 @@ from harness.contracts import Limits, Mutant, Problem, RunKind, RunResult, RunSc
 from harness.build.manifest import rewrite_test_lists
 from harness.evidence.summary import write_summary
 from harness.verify.docker import DockerRunner
-from harness.verify.mutation import hunk_revert_mutants, oracle_diff
+from harness.verify.mutation import deduplicate_mutants, hunk_revert_mutants, oracle_diff
 from harness.verify.runs import (
     run_apply_solution,
     run_collect,
@@ -20,6 +19,9 @@ from harness.verify.runs import (
 )
 from harness.verify.static_checks import check_task_folder
 from harness.verify.verdict import decide, reclassify_by_outcomes
+
+LOGGER = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -165,7 +167,14 @@ def verify_case(
             image_digest=build_outcome.image_digest, runner=runner,
         )
         apply_runs = [apply_run]
-        all_mutants = hunk_mutants + options.extra_mutants
+        all_mutants, dropped_notes = deduplicate_mutants(hunk_mutants, options.extra_mutants)
+        if dropped_notes:
+            for d_note in dropped_notes:
+                LOGGER.info("%s", d_note)
+            if notes is None:
+                notes = []
+            notes.extend(dropped_notes)
+
         if all_mutants:
             mutant_runs = run_mutants(
                 task_dir=task_dir,
@@ -177,6 +186,7 @@ def verify_case(
                 image_digest=build_outcome.image_digest,
                 runner=runner,
             )
+
 
     # 5. Статические проверки (владелец: №4).
     # Без try: модуль собран и обязателен. Проглоченное исключение отключало разом все

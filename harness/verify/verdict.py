@@ -160,7 +160,42 @@ def _touches_invalid(run: RunResult, skip: set[str]) -> bool:
     return any(test_id in skip for test_id in run.tests)
 
 
+SYNTAX_OR_IMPORT_ERRORS = {
+    "SyntaxError",
+    "IndentationError",
+    "TabError",
+    "ImportError",
+    "ModuleNotFoundError",
+}
+
+
+def _is_syntax_or_import_breaker(run: RunResult) -> bool:
+    """Проверяет, не вызвал ли мутант сбой синтаксиса или импорта вместо реальной проверки.
+
+    Если pytest не смог собрать тесты или все сбои — это SyntaxError/ImportError,
+    мутант считается синтаксически невалидным (PROTOCOL §5.4: ошибка импорта или
+    окружения не заменяет проверку дефекта).
+    """
+    if not run.tests:
+        return True
+    has_failed_test = any(rep.outcome == TestOutcome.FAILED for rep in run.tests.values())
+    if has_failed_test:
+        return False
+    all_errors = [
+        rep for rep in run.tests.values()
+        if rep.outcome in (TestOutcome.ERROR, TestOutcome.MISSING)
+    ]
+    if all_errors and all(
+        (rep.exception_type or "") in SYNTAX_OR_IMPORT_ERRORS
+        for rep in all_errors
+    ):
+        return True
+    return False
+
+
+
 def _check_executed(
+
     run: RunResult, problems: list[Problem], *, target: RepairTarget = RepairTarget.ENVIRONMENT,
 ) -> bool:
     """Невыполненный прогон никогда не считается успешным (PROTOCOL §2)."""
@@ -434,13 +469,41 @@ def decide(
                     ))
 
     # 8. Проверка мутантов. Пойманным считается только прогон, который дошёл до конца
-    # и записал reward 0. Отсутствующий reward означает, что патч не наложился или
-    # test.sh не отработал, — молча зачесть такой прогон в пойманные нельзя.
+    # и записал reward 0 в результате реальной проверки тестов (AssertionError),
+    # а не из-за сломанного синтаксиса или сбоя импорта (PROTOCOL §5.4).
+    valid_independent_mutants: list[str] = []
+    has_mutant_runs = False
+    notes_list = list(notes or [])
+
     for r in runs:
         if r.kind != RunKind.MUTANT:
             continue
+        has_mutant_runs = True
         if r.executed and r.reward == 0:
+            if _is_syntax_or_import_breaker(r):
+                if r.name.startswith(LLM_MUTANT_PREFIX):
+                    LOGGER.warning(
+                        "Мутант %s отброшен: вызвал синтаксическую ошибку или сбой импорта вместо логической проверки",
+                        r.name,
+                    )
+                    discard_msg = f"Мутант {r.name} отброшен: вызвал сбой импорта/синтаксиса"
+                    if discard_msg not in notes_list:
+                        notes_list.append(discard_msg)
+                else:
+                    problems.append(Problem(
+                        category=ProblemCategory.INTERNAL,
+                        target=RepairTarget.NONE,
+                        details=(
+                            f"Hunk-revert мутант {r.name} вызвал сбой синтаксиса/импорта вместо логической проверки"
+                        ),
+                        run_names=[r.name],
+                    ))
+                continue
+
+            if r.name.startswith(LLM_MUTANT_PREFIX):
+                valid_independent_mutants.append(r.name)
             continue
+
         if r.executed and r.reward == 1:
             problems.append(Problem(
                 category=ProblemCategory.MUTANT_SURVIVED,
@@ -464,9 +527,19 @@ def decide(
                 run_names=[r.name],
             ))
 
+    # Если проводились прогоны мутантов, но ни один независимый мутант не пойман/не уцелел —
+    # честно фиксируем это в notes (уезжает в limitations), чтобы не маскировать отсутствие сигнала.
+    if has_mutant_runs and not valid_independent_mutants:
+        missing_note = (
+            "Мутационное тестирование проведено только на основе hunk-revert; "
+            "независимые LLM-мутанты отсутствуют или были отброшены"
+        )
+        if missing_note not in notes_list:
+            notes_list.append(missing_note)
+
     run_names = [r.name for r in runs]
     return Verdict(
         ok=len(problems) == 0, problems=problems, runs=run_names,
-        notes=list(notes or []),
+        notes=notes_list,
     )
 

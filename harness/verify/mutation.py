@@ -95,6 +95,11 @@ def hunk_revert_mutants(diff: str) -> list[Mutant]:
                     hunk_body_lines.append(cur)
                 i += 1
 
+            hunk_anchor_lines = [line_item[1:] for line_item in hunk_body_lines if line_item.startswith("-")]
+            hunk_replacement_lines = [line_item[1:] for line_item in hunk_body_lines if line_item.startswith("+")]
+            anchor_text = "".join(hunk_anchor_lines)
+            replacement_text = "".join(hunk_replacement_lines)
+
             patch_parts = [
                 f"--- a/{current_rel}\n",
                 f"+++ b/{current_rel}\n",
@@ -106,10 +111,87 @@ def hunk_revert_mutants(diff: str) -> list[Mutant]:
                 source=MutantSource.HUNK_REVERT,
                 description=f"Revert hunk {hunk_index} in {current_rel}",
                 patch="".join(patch_parts),
+                file_path=current_rel,
+                anchor=anchor_text,
+                replacement=replacement_text,
             ))
             continue
 
         i += 1
 
     return mutants
+
+
+def normalize_snippet(s: str) -> str:
+    """Нормализует фрагмент кода: убирает пробелы в начале/конце строк и пустые строки."""
+    return "\n".join(line.strip() for line in s.splitlines() if line.strip())
+
+
+def deduplicate_mutants(
+    hunk_mutants: list[Mutant], extra_mutants: list[Mutant]
+) -> tuple[list[Mutant], list[str]]:
+    """Отсекает дубликаты мутантов:
+
+    1. Мутанты, дублирующие откат эталона (hunk-revert): если LLM-мутант меняет
+       код решения обратно на исходный код (anchor и replacement совпадают с hunk-revert).
+    2. Повторяющиеся LLM-мутанты между собой (одинаковый file_path, anchor и replacement).
+    3. Мутанты без изменений (anchor совпадает с replacement).
+
+    Возвращает (итоговый список мутантов, список сообщений об отброшенных).
+    """
+    kept_extra: list[Mutant] = []
+    dropped_notes: list[str] = []
+    seen_extra: set[tuple[str, str, str]] = set()
+
+    # Собираем все инверсии эталона (hunk-revert)
+    reverts_by_file: dict[str, list[tuple[str, str]]] = {}
+    for h in hunk_mutants:
+        norm_path = h.file_path.replace("\\", "/").strip("./")
+        norm_anc = normalize_snippet(h.anchor)
+        norm_rep = normalize_snippet(h.replacement)
+        if norm_anc and norm_rep:
+            reverts_by_file.setdefault(norm_path, []).append((norm_anc, norm_rep))
+
+    for m in extra_mutants:
+        norm_path = m.file_path.replace("\\", "/").strip("./")
+        norm_anc = normalize_snippet(m.anchor)
+        norm_rep = normalize_snippet(m.replacement)
+
+        # 1. Пустая мутация
+        if not norm_anc or not norm_rep or norm_anc == norm_rep:
+            dropped_notes.append(
+                f"Мутант {m.name} отброшен: пустой anchor/replacement или замена тождественна"
+            )
+            continue
+
+        # 2. Дубликат другого LLM-мутанта
+        key = (norm_path, norm_anc, norm_rep)
+        if key in seen_extra:
+            dropped_notes.append(
+                f"Мутант {m.name} отброшен: дублирует другого LLM-мутанта в {m.file_path}"
+            )
+            continue
+
+        # 3. Дубликат отката эталона (hunk-revert)
+        is_hunk_duplicate = False
+        if norm_path in reverts_by_file:
+            for h_anc, h_rep in reverts_by_file[norm_path]:
+                # Точное совпадение или взаимное включение
+                if (norm_anc == h_anc and norm_rep == h_rep) or \
+                   (norm_anc in h_anc and norm_rep in h_rep) or \
+                   (h_anc in norm_anc and h_rep in norm_rep):
+                    is_hunk_duplicate = True
+                    break
+
+        if is_hunk_duplicate:
+            dropped_notes.append(
+                f"Мутант {m.name} отброшен: дублирует откат эталонного решения (hunk-revert) в {m.file_path}"
+            )
+            continue
+
+        seen_extra.add(key)
+        kept_extra.append(m)
+
+    return [*hunk_mutants, *kept_extra], dropped_notes
+
 

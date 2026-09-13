@@ -139,6 +139,7 @@ def run(case: CaseInput) -> CaseResult:
 
         # 6.5. LLM-мутанты — генерируем один раз до цикла
         llm_mutants = []
+        mutant_gen_note = None
         try:
             # Дифф эталонного решения существует только после применения solve.sh, а применяется
             # он в контейнере (verify.runs.run_apply_solution) — образа здесь ещё нет. Поэтому
@@ -151,9 +152,13 @@ def run(case: CaseInput) -> CaseResult:
             if solution_text.strip():
                 llm_mutants = write_mutants(client, context, draft, solution_text)
                 LOGGER.info("Generated %d LLM mutants", len(llm_mutants))
-        except Exception:
+            else:
+                mutant_gen_note = "Решение не содержит текстовых файлов для генерации LLM-мутантов"
+        except Exception as exc:
             LOGGER.warning("LLM mutant generation failed, continuing with hunk-revert only",
                            exc_info=True)
+            mutant_gen_note = f"Генерация независимых LLM-мутантов завершилась сбоем ({exc})"
+
 
         final_verdict = None
         verify_options = VerifyOptions(
@@ -206,6 +211,9 @@ def run(case: CaseInput) -> CaseResult:
             # Верификация что-то поправила сама (например, переложила тест между списками):
             # это ограничение кейса, о котором надо сказать, но не провал.
             limitations.extend(final_verdict.notes)
+
+        if mutant_gen_note and mutant_gen_note not in limitations:
+            limitations.append(mutant_gen_note)
 
         if final_verdict and final_verdict.ok:
             status = Status.READY
